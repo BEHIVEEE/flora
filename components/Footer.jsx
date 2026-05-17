@@ -38,7 +38,7 @@ const Footer = () => {
             <div className="space-y-2 text-sm text-slate-600">
               <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-teal-600" /> Thane, Maharashtra, India</div>
               <div className="flex items-center gap-2"><Phone className="w-4 h-4 text-teal-600" /> 1800-XXX-XXXX</div>
-              <div className="flex items-center gap-2"><Mail className="w-4 h-4 text-teal-600" /> care@chemistshop.top</div>
+              <div className="flex items-center gap-2" suppressHydrationWarning><Mail className="w-4 h-4 text-teal-600" /> <span suppressHydrationWarning>care@chemistshop.top</span></div>
             </div>
           </div>
           <div>
