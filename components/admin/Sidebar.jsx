@@ -1,8 +1,9 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Package, ShoppingBag, Clock, Settings, ExternalLink, LogOut, X, Menu, FileText, Users, Boxes, Upload } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { LayoutDashboard, Package, ShoppingBag, Clock, Settings, ExternalLink, LogOut, X, Menu, FileText, Users, Boxes } from 'lucide-react';
+import { useState } from 'react';
+import { useAuth } from '@/components/AuthProvider';
 import { toast } from 'sonner';
 
 const NAV = [
@@ -68,15 +69,9 @@ const Sidebar = () => {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  const { user, logout } = useAuth() || { user: null, logout: () => {} };
 
-  useEffect(() => {
-    const token = localStorage.getItem('cs_admin_token');
-    if (!token) return;
-    fetch('/api/admin/me', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json()).then(d => { if (d.ok) setUser(d.user); });
-  }, []);
-
-  const signOut = () => { localStorage.removeItem('cs_admin_token'); toast.success('Signed out'); router.push('/admin/login'); setOpen(false); };
+  const signOut = () => { logout(); toast.success('Signed out'); setOpen(false); };
 
   return (
     <>

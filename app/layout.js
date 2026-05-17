@@ -5,6 +5,7 @@ import Header from '@/components/Header';
 import BottomNav from '@/components/BottomNav';
 import Footer from '@/components/Footer';
 import CartProvider from '@/components/CartProvider';
+import AuthProvider from '@/components/AuthProvider';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
 
@@ -21,12 +22,14 @@ const App = ({ children }) => {
   return (
     <html lang="en" className={inter.variable} style={{ colorScheme: 'light' }} suppressHydrationWarning>
       <body className="min-h-screen bg-white text-slate-900 font-sans antialiased pb-20 md:pb-0" suppressHydrationWarning>
-        <CartProvider>
-          <Header />
-          <main className="min-h-[60vh]">{children}</main>
-          <Footer />
-          <BottomNav />
-        </CartProvider>
+        <AuthProvider>
+          <CartProvider>
+            <Header />
+            <main className="min-h-[60vh]">{children}</main>
+            <Footer />
+            <BottomNav />
+          </CartProvider>
+        </AuthProvider>
         <Toaster richColors position="top-center" />
       </body>
     </html>

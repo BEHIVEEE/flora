@@ -2,17 +2,20 @@
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { Search, ShoppingCart, User, MapPin, Menu, X, Heart, FileText, Phone } from 'lucide-react';
+import { Search, ShoppingCart, User, MapPin, Menu, X, Heart, FileText, Phone, LogOut, Package, LogIn, UserPlus, ShieldCheck } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useCart } from './CartProvider';
+import { useAuth } from './AuthProvider';
 import { CATEGORIES } from '@/lib/seed-data';
 
 const Header = () => {
   const router = useRouter();
   const pathname = usePathname();
   const { totalQty } = useCart() || { totalQty: 0 };
+  const { user, logout } = useAuth() || { user: null, logout: () => {} };
   const [q, setQ] = useState('');
   const [scrolled, setScrolled] = useState(false);
 
@@ -23,6 +26,7 @@ const Header = () => {
   }, []);
 
   if (pathname?.startsWith('/admin')) return null;
+  if (pathname === '/login' || pathname === '/signup') return null;
 
   const onSearch = (e) => {
     e.preventDefault();
@@ -63,11 +67,27 @@ const Header = () => {
               </Link>
             </div>
             <nav className="p-2">
+              {user ? (
+                <div className="px-4 py-3 mb-2 bg-teal-50/60 mx-2 rounded-xl flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 text-white font-bold flex items-center justify-center">{(user.name || user.email)[0].toUpperCase()}</div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-sm text-slate-900 truncate">{user.name || 'Welcome'}</div>
+                    <div className="text-[11px] text-slate-500 truncate">{user.email}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="px-2 mb-2 grid grid-cols-2 gap-2">
+                  <Link href="/login" className="block text-center px-3 py-2.5 rounded-lg bg-teal-600 text-white text-sm font-bold">Sign In</Link>
+                  <Link href="/signup" className="block text-center px-3 py-2.5 rounded-lg border border-teal-600 text-teal-700 text-sm font-bold">Sign Up</Link>
+                </div>
+              )}
               <Link href="/" className="block px-4 py-3 rounded-lg hover:bg-slate-50 font-medium">Home</Link>
               <Link href="/products" className="block px-4 py-3 rounded-lg hover:bg-slate-50 font-medium">All Products</Link>
               <Link href="/prescription" className="block px-4 py-3 rounded-lg hover:bg-slate-50 font-medium">Upload Prescription</Link>
               <Link href="/account" className="block px-4 py-3 rounded-lg hover:bg-slate-50 font-medium">My Account</Link>
               <Link href="/account?tab=orders" className="block px-4 py-3 rounded-lg hover:bg-slate-50 font-medium">My Orders</Link>
+              {user?.role === 'admin' && <Link href="/admin" className="block px-4 py-3 rounded-lg bg-teal-50 text-teal-800 font-bold">Admin Panel</Link>}
+              {user && <button onClick={logout} className="w-full text-left block px-4 py-3 rounded-lg hover:bg-rose-50 text-rose-600 font-medium">Sign Out</button>}
               <div className="px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">Categories</div>
               {CATEGORIES.map(c => (
                 <Link key={c.id} href={`/products?category=${c.id}`} className="block px-4 py-2.5 rounded-lg hover:bg-slate-50">{c.name}</Link>
@@ -96,10 +116,38 @@ const Header = () => {
           <FileText className="w-4 h-4" />
           <span>Upload Rx</span>
         </Link>
-        <Link href="/account" className="hidden md:flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-teal-700 px-3 py-2 rounded-lg hover:bg-teal-50 transition-colors">
-          <User className="w-4 h-4" />
-          <span>Account</span>
-        </Link>
+
+        {user ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="hidden md:flex items-center gap-2 px-2.5 py-1.5 rounded-full hover:bg-teal-50 transition-colors">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 text-white font-bold flex items-center justify-center text-sm">{(user.name || user.email || 'U')[0].toUpperCase()}</div>
+                <div className="text-left max-w-[120px]">
+                  <div className="text-[10px] text-slate-500 leading-none">Hi,</div>
+                  <div className="text-xs font-bold text-slate-900 leading-tight truncate">{(user.name || user.email).split(' ')[0]}</div>
+                </div>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="font-bold">
+                <div className="text-sm truncate">{user.name || 'Welcome'}</div>
+                <div className="text-[11px] text-slate-500 font-normal truncate">{user.email}</div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => router.push('/account')}><User className="w-4 h-4 mr-2" /> My Account</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push('/account?tab=orders')}><Package className="w-4 h-4 mr-2" /> My Orders</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push('/account?tab=prescriptions')}><FileText className="w-4 h-4 mr-2" /> Prescriptions</DropdownMenuItem>
+              {user.role === 'admin' && (<><DropdownMenuSeparator /><DropdownMenuItem onClick={() => router.push('/admin')}><ShieldCheck className="w-4 h-4 mr-2 text-teal-700" /> <span className="font-semibold text-teal-700">Admin Panel</span></DropdownMenuItem></>)}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={logout} className="text-rose-600 focus:text-rose-700 focus:bg-rose-50"><LogOut className="w-4 h-4 mr-2" /> Sign Out</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Link href="/login" className="hidden md:flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-teal-700 px-3 py-2 rounded-lg hover:bg-teal-50 transition-colors">
+            <LogIn className="w-4 h-4" />
+            <span>Sign In</span>
+          </Link>
+        )}
         <Link href="/cart" className="relative flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-teal-700 px-3 py-2 rounded-lg hover:bg-teal-50 transition-colors">
           <ShoppingCart className="w-5 h-5" />
           <span className="hidden md:inline">Cart</span>

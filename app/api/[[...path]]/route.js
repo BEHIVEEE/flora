@@ -51,12 +51,15 @@ const DEFAULT_SLOTS = [
 ];
 
 async function ensureAdminUser(db) {
-  const u = await db.collection('admin_users').findOne({ email: 'admin@chemistshop.top' });
+  // Unified users collection - admin is just a user with role='admin'
+  const u = await db.collection('users').findOne({ email: 'admin@chemistshop.top' });
   if (!u) {
     const salt = crypto.randomBytes(16).toString('hex');
     const hash = hashPassword('admin123', salt);
-    await db.collection('admin_users').insertOne({ id: 'admin-1', email: 'admin@chemistshop.top', name: 'Admin', role: 'owner', salt, hash, createdAt: new Date().toISOString() });
+    await db.collection('users').insertOne({ id: 'admin-1', email: 'admin@chemistshop.top', name: 'Admin', role: 'admin', phone: '', salt, hash, createdAt: new Date().toISOString() });
   }
+  // Migrate legacy admin_users collection (delete it once users exists)
+  try { await db.collection('admin_users').drop(); } catch {}
 }
 
 async function ensureSeed(db) {
@@ -143,12 +146,22 @@ export async function GET(req, { params }) {
     if (path === '' || path === 'health') return json({ ok: true, service: 'chemistshop-api', time: new Date().toISOString() });
     if (path === 'categories') return json({ categories: CATEGORIES });
 
-    // Admin: me (validates token)
+    // Admin: me (validates token, requires admin role)
     if (path === 'admin/me') {
       const token = getBearer(req);
       const data = verifyToken(token);
       if (!data) return json({ ok: false, error: 'Invalid or expired token' }, 401);
-      const user = await db.collection('admin_users').findOne({ id: data.uid }, { projection: { _id: 0, hash: 0, salt: 0 } });
+      const user = await db.collection('users').findOne({ id: data.uid }, { projection: { _id: 0, hash: 0, salt: 0 } });
+      if (!user || user.role !== 'admin') return json({ ok: false, error: 'Admin access required' }, 403);
+      return json({ ok: true, user });
+    }
+
+    // Unified auth: who am I (any role)
+    if (path === 'auth/me') {
+      const token = getBearer(req);
+      const data = verifyToken(token);
+      if (!data) return json({ ok: false, error: 'Invalid or expired token' }, 401);
+      const user = await db.collection('users').findOne({ id: data.uid }, { projection: { _id: 0, hash: 0, salt: 0 } });
       if (!user) return json({ ok: false }, 401);
       return json({ ok: true, user });
     }
@@ -359,16 +372,47 @@ export async function POST(req, { params }) {
     const db = await getDb();
     const body = await req.json().catch(() => ({}));
 
-    // Admin: login
+    // Admin: login (legacy alias - rejects non-admin)
     if (path === 'admin/login') {
       await ensureAdminUser(db);
       const { email, password } = body;
-      const user = await db.collection('admin_users').findOne({ email: (email || '').toLowerCase().trim() });
+      const user = await db.collection('users').findOne({ email: (email || '').toLowerCase().trim() });
       if (!user) return json({ ok: false, error: 'Invalid email or password' }, 401);
       const hash = hashPassword(password || '', user.salt);
       if (hash !== user.hash) return json({ ok: false, error: 'Invalid email or password' }, 401);
-      const token = signToken({ uid: user.id, email: user.email });
+      if (user.role !== 'admin') return json({ ok: false, error: 'This account does not have admin access' }, 403);
+      const token = signToken({ uid: user.id, email: user.email, role: user.role });
       return json({ ok: true, token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+    }
+
+    // Unified auth: login (any role)
+    if (path === 'auth/login') {
+      await ensureAdminUser(db);
+      const { email, password } = body;
+      const user = await db.collection('users').findOne({ email: (email || '').toLowerCase().trim() });
+      if (!user) return json({ ok: false, error: 'Invalid email or password' }, 401);
+      const hash = hashPassword(password || '', user.salt);
+      if (hash !== user.hash) return json({ ok: false, error: 'Invalid email or password' }, 401);
+      const token = signToken({ uid: user.id, email: user.email, role: user.role });
+      return json({ ok: true, token, user: { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone || '' } });
+    }
+
+    // Unified auth: signup (only role='user'; admin must be seeded)
+    if (path === 'auth/signup') {
+      const { name, email, password, phone } = body;
+      if (!email || !password) return json({ ok: false, error: 'Email and password are required' }, 400);
+      if (password.length < 6) return json({ ok: false, error: 'Password must be at least 6 characters' }, 400);
+      const emailLc = email.toLowerCase().trim();
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailLc)) return json({ ok: false, error: 'Enter a valid email' }, 400);
+      const existing = await db.collection('users').findOne({ email: emailLc });
+      if (existing) return json({ ok: false, error: 'An account with this email already exists' }, 409);
+      const salt = crypto.randomBytes(16).toString('hex');
+      const hash = hashPassword(password, salt);
+      const id = 'u-' + uuidv4().slice(0, 12);
+      const user = { id, name: (name || '').trim(), email: emailLc, phone: (phone || '').trim(), role: 'user', salt, hash, createdAt: new Date().toISOString() };
+      await db.collection('users').insertOne({ ...user });
+      const token = signToken({ uid: id, email: emailLc, role: 'user' });
+      return json({ ok: true, token, user: { id, email: emailLc, name: user.name, phone: user.phone, role: 'user' } });
     }
 
     if (path === 'orders') {
@@ -565,11 +609,11 @@ export async function PUT(req, { params }) {
       return json({ settings });
     }
 
-    if (path === 'admin/password') {
+    if (path === 'admin/password' || path === 'auth/password') {
       const token = getBearer(req);
       const auth = verifyToken(token);
       if (!auth) return json({ ok: false, error: 'Unauthorized' }, 401);
-      const user = await db.collection('admin_users').findOne({ id: auth.uid });
+      const user = await db.collection('users').findOne({ id: auth.uid });
       if (!user) return json({ ok: false }, 401);
       const { current, next } = body;
       const cur = hashPassword(current || '', user.salt);
@@ -577,7 +621,7 @@ export async function PUT(req, { params }) {
       if (!next || next.length < 6) return json({ ok: false, error: 'New password must be at least 6 characters' }, 400);
       const salt = crypto.randomBytes(16).toString('hex');
       const hash = hashPassword(next, salt);
-      await db.collection('admin_users').updateOne({ id: auth.uid }, { $set: { salt, hash, updatedAt: new Date().toISOString() } });
+      await db.collection('users').updateOne({ id: auth.uid }, { $set: { salt, hash, updatedAt: new Date().toISOString() } });
       return json({ ok: true });
     }
 

@@ -1,14 +1,17 @@
 'use client';
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { useAuth } from './AuthProvider';
 
 const CartCtx = createContext(null);
 export const useCart = () => useContext(CartCtx);
 
 const CartProvider = ({ children }) => {
   const [items, setItems] = useState([]);
-  const [userId, setUserId] = useState('guest');
+  const [guestId, setGuestId] = useState('guest');
   const [hydrated, setHydrated] = useState(false);
+  const auth = useAuth();
+  const userId = auth?.user?.id || guestId;
 
   useEffect(() => {
     try {
@@ -16,7 +19,7 @@ const CartProvider = ({ children }) => {
       if (raw) setItems(JSON.parse(raw));
       let uid = localStorage.getItem('cs_uid');
       if (!uid) { uid = 'u-' + uuidv4().slice(0, 10); localStorage.setItem('cs_uid', uid); }
-      setUserId(uid);
+      setGuestId(uid);
     } catch {}
     setHydrated(true);
   }, []);

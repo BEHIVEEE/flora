@@ -2,7 +2,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useCart } from '@/components/CartProvider';
+import { useAuth } from '@/components/AuthProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,19 +20,26 @@ const TABS = [
 const AccountInner = () => {
   const sp = useSearchParams();
   const router = useRouter();
-  const { userId } = useCart() || {};
+  const { user, logout, loading } = useAuth() || {};
+  const userId = user?.id;
   const [tab, setTab] = useState(sp.get('tab') || 'orders');
   const [profile, setProfile] = useState({ name: '', email: '', phone: '' });
 
   useEffect(() => {
-    try { const p = JSON.parse(localStorage.getItem('cs_profile') || '{}'); setProfile(prev => ({ ...prev, ...p })); } catch {}
-  }, []);
+    if (user) setProfile({ name: user.name || '', email: user.email || '', phone: user.phone || '' });
+  }, [user]);
   useEffect(() => { const t = sp.get('tab'); if (t) setTab(t); }, [sp]);
 
   const saveProfile = () => {
     localStorage.setItem('cs_profile', JSON.stringify(profile));
     toast.success('Profile saved');
   };
+
+  if (loading || !user) return (
+    <div className="min-h-[50vh] flex items-center justify-center">
+      <div className="flex items-center gap-3 text-slate-500"><div className="w-5 h-5 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" /> Loading…</div>
+    </div>
+  );
 
   return (
     <div className="bg-slate-50 min-h-screen">
@@ -53,7 +60,7 @@ const AccountInner = () => {
                   </button>
                 );
               })}
-              <button onClick={() => { localStorage.removeItem('cs_uid'); localStorage.removeItem('cs_profile'); toast.success('Signed out'); router.push('/'); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium hover:bg-rose-50 text-rose-600">
+              <button onClick={() => { logout(); toast.success('Signed out'); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium hover:bg-rose-50 text-rose-600">
                 <LogOut className="w-4 h-4" />
                 <span className="flex-1 text-left">Sign Out</span>
               </button>

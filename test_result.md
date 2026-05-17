@@ -12,12 +12,12 @@
 #====================================================================================================
 
 user_problem_statement: |
-  ChemistShop admin panel v3 — Adds: email+password admin auth, bulk CSV product import,
-  inventory adjustments log + restock orders, customer analytics (LTV/retention/segments),
-  prescription chat with WhatsApp deep link.
+  v4 — Unified auth + role-based access. Same backend serves user storefront and admin panel.
+  Customers can sign up & log in (role=user). Admin uses the same login (role=admin) but
+  is redirected to /admin. Route guards prevent cross-access.
 
 backend:
-  - task: "Admin auth: POST /api/admin/login + GET /api/admin/me + PUT /api/admin/password"
+  - task: "Unified auth: POST /api/auth/signup, POST /api/auth/login, GET /api/auth/me, PUT /api/auth/password"
     implemented: true
     working: true
     file: "/app/app/api/[[...path]]/route.js"
@@ -27,12 +27,30 @@ backend:
     status_history:
       - working: "NA"
         agent: "main"
-        comment: "Seeded admin user admin@chemistshop.top / admin123. Returns HMAC-signed token (7-day expiry). /api/admin/me verifies Bearer token. /api/admin/password requires current+next, validates current hash, salts+rehashes new password."
+        comment: |
+          Unified users collection (admin migrated from admin_users). Token includes role claim.
+          /api/auth/signup creates role='user' only (with name/email/password/phone), rejects dup email (409), validates email format & min 6 char password.
+          /api/auth/login returns {token, user{id,email,name,role,phone}}.
+          /api/auth/me requires Bearer; 401 if missing/invalid.
+          /api/auth/password changes the logged-in user's password.
       - working: true
         agent: "testing"
-        comment: "✅ ALL 8 AUTH TESTS PASSED: (1) POST /api/admin/login with correct credentials returns token + role=owner, (2) Wrong password correctly returns 401, (3) GET /api/admin/me with valid bearer returns user data, (4) No bearer returns 401, (5) Invalid bearer returns 401, (6) PUT /api/admin/password successfully changed to admin456, (7) Re-login with admin456 successful, (8) Password restored to admin123."
+        comment: |
+          ✅ ALL 12 TESTS PASSED (A1-A8):
+          A1: POST /api/auth/signup with valid data → 200 {ok:true, token, user{role:'user'}} ✅
+          A2: Duplicate signup → 409 with 'already exists' error ✅
+          A3: Invalid email 'badmail' → 400 with 'valid email' error ✅
+          A4: Password 'short' (5 chars) → 400 with '6 characters' error ✅
+          A5a: POST /api/auth/login with correct password → 200 {ok:true, token, user{role:'user'}} ✅
+          A5b: POST /api/auth/login with wrong password → 401 ✅
+          A6a: GET /api/auth/me with valid Bearer → 200 {ok:true, user{role:'user', email matches}} ✅
+          A6b: GET /api/auth/me with no header → 401 ✅
+          A6c: GET /api/auth/me with invalid token → 401 ✅
+          A7: PUT /api/auth/password with Bearer {current, next} → 200 {ok:true} ✅
+          A8a: POST /api/auth/login with old password → 401 ✅
+          A8b: POST /api/auth/login with new password → 200 ✅
 
-  - task: "Bulk import: POST /api/products/bulk"
+  - task: "Role-protected: GET /api/admin/me requires role=admin (403 for users)"
     implemented: true
     working: true
     file: "/app/app/api/[[...path]]/route.js"
@@ -42,57 +60,18 @@ backend:
     status_history:
       - working: "NA"
         agent: "main"
-        comment: "Accepts {products:[{name,brand,category,price,mrp,stock,packSize,description,prescription,imageUrl}]}. Returns {created, failed, errors[]}. Each created product also logs inventory entry type 'import'."
+        comment: "Verifies token then checks user.role==='admin'. Returns 403 with 'Admin access required' for user-role tokens, 401 for no token."
       - working: true
         agent: "testing"
-        comment: "✅ ALL 2 BULK IMPORT TESTS PASSED: (1) POST /api/products/bulk with 2 products (one with all fields, one minimal) returned {created:2, failed:0}, (2) GET /api/products?search=CSV verified both products exist with IDs starting with 'p-'."
+        comment: |
+          ✅ ALL 5 TESTS PASSED (B1-B5):
+          B1: POST /api/auth/login with admin@chemistshop.top/admin123 → 200 with token, user.role='admin' ✅
+          B2: GET /api/admin/me with admin Bearer → 200 {ok:true, user{role:'admin'}} ✅
+          B3: GET /api/admin/me with USER Bearer → 403 {ok:false, error:'Admin access required'} ✅
+          B4: GET /api/admin/me with NO header → 401 ✅
+          B5: GET /api/admin/me with garbage Bearer 'xyz.abc' → 401 ✅
 
-  - task: "Customer analytics: GET /api/admin/customers"
-    implemented: true
-    working: true
-    file: "/app/app/api/[[...path]]/route.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: "NA"
-        agent: "main"
-        comment: "Aggregates orders by phone. Computes orderCount, totalSpent, avgOrderValue, firstOrderDate, lastOrderDate, daysSinceLast, segment(New|Returning|Loyal|VIP). Returns summary with totalLTV, avgLTV, retentionRate, segments breakdown."
-      - working: true
-        agent: "testing"
-        comment: "✅ ALL 2 CUSTOMER ANALYTICS TESTS PASSED: (1) GET /api/admin/customers returns customers[] with all required keys (phone, name, orderCount, totalSpent, avgOrderValue, firstOrderDate, lastOrderDate, daysSinceLast, segment) for 8 customers, (2) Summary structure complete with total, segments{New,Returning,Loyal,VIP}, totalLTV, avgLTV, retentionRate, avgOrderCount."
-
-  - task: "Inventory logs + restock: GET /api/inventory/logs, POST /api/inventory/restock"
-    implemented: true
-    working: true
-    file: "/app/app/api/[[...path]]/route.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: "NA"
-        agent: "main"
-        comment: "Auto-logs entries on POST /api/orders (type='sale', qtyChange negative), POST /api/products (type='initial'), PUT /api/products when stock changes (type='restock'|'adjustment' based on diff), POST /api/products/bulk (type='import'). Manual POST /api/inventory/restock {productId,qty,reason}. GET supports ?productId= filter."
-      - working: true
-        agent: "testing"
-        comment: "✅ ALL 4 INVENTORY TESTS PASSED: (1) GET /api/inventory/logs returns {logs[]}, (2) POST /api/inventory/restock with qty:25 returns {ok:true, log:{type:'restock', qtyChange:25, before, after}} with correct math (after=before+25), (3) POST with qty:-5 returns {log:{type:'adjustment', qtyChange:-5}}, (4) GET /api/inventory/logs?productId=X correctly filters and shows both new entries."
-
-  - task: "Prescription chat: GET/POST /api/prescriptions/:id/messages + PATCH /api/prescriptions/:id"
-    implemented: true
-    working: true
-    file: "/app/app/api/[[...path]]/route.js"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-      - working: "NA"
-        agent: "main"
-        comment: "Messages collection rx_messages keyed by prescriptionId, with sender (admin|customer), authorName, text, createdAt. GET sorted ascending by createdAt. PATCH /api/prescriptions/:id updates status (Under Review|Confirmed|Delivered|Rejected). GET /api/admin/prescriptions supports ?status= and ?search= (id, patientName, phone). GET /api/prescriptions/:id returns single doc."
-      - working: true
-        agent: "testing"
-        comment: "✅ ALL 8 PRESCRIPTION CHAT TESTS PASSED: (1) POST /api/prescriptions creates RX with ID starting 'RX-', (2) GET /api/prescriptions/:id retrieves doc, (3) POST /api/prescriptions/:id/messages with sender='admin' creates message, (4) POST with sender='customer' creates message, (5) GET /api/prescriptions/:id/messages returns 2 messages sorted ascending by createdAt, (6) PATCH /api/prescriptions/:id updates status to 'Confirmed', (7) GET /api/admin/prescriptions?status=Confirmed includes the RX, (8) GET /api/admin/prescriptions?search=9999999 finds RX by phone."
-
-  - task: "Previous APIs still working"
+  - task: "Legacy POST /api/admin/login rejects non-admin role with 403"
     implemented: true
     working: true
     file: "/app/app/api/[[...path]]/route.js"
@@ -100,32 +79,49 @@ backend:
     priority: "medium"
     needs_retesting: false
     status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Same query path as /api/auth/login but explicitly 403s if user.role !== 'admin'."
       - working: true
         agent: "testing"
-        comment: "Previously validated — 21 storefront endpoints + 7 admin endpoint groups all PASS."
+        comment: |
+          ✅ ALL 3 TESTS PASSED (C1-C3):
+          C1: POST /api/admin/login with admin@chemistshop.top/admin123 → 200 with role='admin' ✅
+          C2: POST /api/admin/login with USER credentials → 403 {ok:false, error:'This account does not have admin access'} ✅
+          C3: POST /api/admin/login with wrong password → 401 ✅
+
+  - task: "Previously validated APIs still pass"
+    implemented: true
+    working: true
+    file: "/app/app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+      - working: true
+        agent: "testing"
+        comment: "21 storefront + 7 admin + 24 v3 (auth/csv/customers/inventory/rx) endpoints validated previously."
 
 frontend:
-  - task: "Admin login + auth-gated layout"
+  - task: "Login/signup pages + AuthProvider + role-based routing"
     implemented: true
     working: "NA"
-    file: "/app/app/admin/"
+    file: "/app/components/AuthProvider.jsx, /app/app/login, /app/app/signup"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
 
 metadata:
   created_by: "main_agent"
-  version: "3.0"
-  test_sequence: 2
+  version: "4.0"
+  test_sequence: 3
   run_ui: false
 
 test_plan:
   current_focus:
-    - "Admin auth: POST /api/admin/login + GET /api/admin/me + PUT /api/admin/password"
-    - "Bulk import: POST /api/products/bulk"
-    - "Customer analytics: GET /api/admin/customers"
-    - "Inventory logs + restock: GET /api/inventory/logs, POST /api/inventory/restock"
-    - "Prescription chat: GET/POST /api/prescriptions/:id/messages + PATCH /api/prescriptions/:id"
+    - "Unified auth: POST /api/auth/signup, POST /api/auth/login, GET /api/auth/me, PUT /api/auth/password"
+    - "Role-protected: GET /api/admin/me requires role=admin (403 for users)"
+    - "Legacy POST /api/admin/login rejects non-admin role with 403"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -133,51 +129,57 @@ test_plan:
 agent_communication:
   - agent: "main"
     message: |
-      ONLY test the 5 NEW endpoint groups listed in test_plan.current_focus. Do NOT retest prior APIs.
+      ONLY test the 3 new auth-focused groups. Do not retest previously validated 50+ endpoints.
       Base URL: NEXT_PUBLIC_BASE_URL from /app/.env. Seeded admin: admin@chemistshop.top / admin123.
 
       Suggested flow:
-      1) AUTH:
-         - POST /api/admin/login {email:'admin@chemistshop.top',password:'admin123'} -> {ok:true, token, user{role:'owner'}}
-         - GET /api/admin/me with Authorization: Bearer <token> -> {ok:true, user}; without/invalid token -> 401
-         - POST /api/admin/login with wrong password -> 401 {ok:false}
-         - PUT /api/admin/password {current:'admin123', next:'admin456'} with bearer token -> {ok:true}
-         - re-login with admin456 to confirm; then PUT it back to 'admin123'
+      A) UNIFIED AUTH:
+         A1) POST /api/auth/signup {name:'Test Person', email:'tp+<uniq>@example.com', password:'pass1234', phone:'9876543210'} -> 200 {ok:true, token, user{role:'user'}}
+         A2) Re-POST same email -> 409 {ok:false, error contains 'already'}
+         A3) POST /api/auth/signup with invalid email 'badmail' -> 400
+         A4) POST /api/auth/signup with password 'short' (len 5) -> 400
+         A5) POST /api/auth/login {email:<A1 email>, password:'pass1234'} -> 200 {ok:true, token, user{role:'user'}}; wrong password -> 401
+         A6) GET /api/auth/me with valid Bearer -> 200 {ok:true, user{role:'user', email matches}}; no header -> 401; invalid token -> 401
+         A7) PUT /api/auth/password with Bearer, body {current:'pass1234', next:'newpass1'} -> 200 {ok:true}
+         A8) POST /api/auth/login with old password -> 401; with new password 'newpass1' -> 200
 
-      2) BULK IMPORT:
-         - POST /api/products/bulk { products: [{name:'CSV Test A', brand:'T', category:'medicines', price:50, stock:10, packSize:'Strip', description:'x', prescription:'false', imageUrl:'https://example.com/a.png'}, {name:'CSV Test B', category:'wellness', price:80, mrp:100, stock:5, imageUrl:'https://example.com/b.png'}] }
-           -> {created:2, failed:0}
-         - Verify via GET /api/products?search=CSV both products exist with id starting 'p-'
+      B) ROLE PROTECTION:
+         B1) POST /api/auth/login admin@chemistshop.top/admin123 -> token has role=admin; user.role==='admin'
+         B2) GET /api/admin/me with admin Bearer -> 200 {ok:true, user{role:'admin'}}
+         B3) GET /api/admin/me with USER Bearer (from A5/A8) -> 403 {ok:false, error contains 'Admin'}
+         B4) GET /api/admin/me with NO header -> 401
+         B5) GET /api/admin/me with garbage Bearer 'xyz.abc' -> 401
 
-      3) CUSTOMER ANALYTICS:
-         - GET /api/admin/customers -> { customers[], summary{ total, segments{New,Returning,Loyal,VIP}, totalLTV, avgLTV, retentionRate, avgOrderCount } }
-         - For each customer assert keys: phone, name, orderCount, totalSpent, avgOrderValue, firstOrderDate, lastOrderDate, daysSinceLast, segment
+      C) LEGACY /api/admin/login:
+         C1) POST /api/admin/login admin@chemistshop.top/admin123 -> 200 with role admin
+         C2) POST /api/admin/login with USER email/password (from A) -> 403 {ok:false, error contains 'admin access'}
+         C3) POST /api/admin/login with wrong password -> 401
 
-      4) INVENTORY:
-         - GET /api/inventory/logs -> {logs[]} (may include sale/initial entries from seeded orders)
-         - POST /api/inventory/restock {productId:'<pick first p-XXX from /api/products>', qty:25, reason:'Test restock'} -> {ok:true, stock:<new>, log:{type:'restock', qtyChange:25, before, after}}
-         - POST again with qty:-5 -> {ok:true, log:{type:'adjustment', qtyChange:-5}}
-         - GET /api/inventory/logs?productId=<that id> -> filtered list, includes the 2 new entries
-
-      5) PRESCRIPTION CHAT:
-         - First create a prescription: POST /api/prescriptions {userId:'u-rx-test', patientName:'Test Patient', phone:'9999999999', notes:'Need urgent', fileName:'rx.png', fileDataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='} -> {prescription:{id:'RX-...'}}
-         - GET /api/prescriptions/<id> -> returns the doc
-         - POST /api/prescriptions/<id>/messages {sender:'admin', authorName:'Pharmacist', text:'Hello, confirming dosage'} -> {message:{id:'msg-...'}}
-         - POST another {sender:'customer', text:'Thanks!'} -> ok
-         - GET /api/prescriptions/<id>/messages -> {messages:[]} length 2, sorted ascending
-         - PATCH /api/prescriptions/<id> {status:'Confirmed'} -> {prescription:{status:'Confirmed'}}
-         - GET /api/admin/prescriptions?status=Confirmed -> includes the new RX; ?search=9999999 also matches
-
-      Report PASS/FAIL per group. DO NOT modify any code; only test.
+      Report PASS/FAIL per case (A1-A8, B1-B5, C1-C3). Do not modify code.
+  
   - agent: "testing"
     message: |
-      ✅ BACKEND TESTING COMPLETE - ALL 5 NEW ENDPOINT GROUPS PASSED (24/24 tests)
+      ✅ TESTING COMPLETE - ALL 20 TESTS PASSED (A1-A8, B1-B5, C1-C3)
       
-      Test Results Summary:
-      1. AUTH (8/8 passed): Login with correct/wrong credentials, token validation (valid/invalid/missing), password change cycle (admin123→admin456→admin123)
-      2. BULK IMPORT (2/2 passed): Bulk product creation with mixed field sets, verification via search with p- ID prefix
-      3. CUSTOMER ANALYTICS (2/2 passed): Customer data structure with all required fields (phone, name, orderCount, totalSpent, avgOrderValue, firstOrderDate, lastOrderDate, daysSinceLast, segment), summary with segments breakdown
-      4. INVENTORY (4/4 passed): Logs retrieval, restock (+25), adjustment (-5), filtered logs by productId
-      5. PRESCRIPTION CHAT (8/8 passed): Create RX, retrieve, admin/customer messages, message list sorted ascending, status update to Confirmed, search by status and phone
+      Created /app/backend_test_v4_auth.py with comprehensive test coverage for the 3 new auth endpoint groups.
+      Used unique email with timestamp (testuser1779033894@example.com) to avoid 409 collisions on repeat runs.
       
-      All endpoints working correctly with proper response structures, status codes, and data validation.
+      Test Results:
+      • Unified Auth (A1-A8): 12/12 PASSED ✅
+        - Signup validation (email format, password length, duplicate detection) working correctly
+        - Login with correct/wrong credentials working correctly
+        - GET /api/auth/me with valid/invalid/missing Bearer working correctly
+        - Password change flow working correctly (old password rejected, new password accepted)
+      
+      • Role Protection (B1-B5): 5/5 PASSED ✅
+        - Admin login returns role='admin' in token
+        - GET /api/admin/me correctly allows admin Bearer (200)
+        - GET /api/admin/me correctly rejects user Bearer with 403 and 'Admin access required' error
+        - GET /api/admin/me correctly rejects missing/invalid Bearer with 401
+      
+      • Legacy Admin Login (C1-C3): 3/3 PASSED ✅
+        - Admin credentials accepted with 200
+        - User credentials rejected with 403 and 'This account does not have admin access' error
+        - Wrong password rejected with 401
+      
+      All endpoints are working as specified. No code modifications were made.

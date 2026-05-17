@@ -98,8 +98,8 @@ const ChangePasswordForm = () => {
     if (form.next.length < 6) { toast.error('New password must be at least 6 characters'); return; }
     if (form.next !== form.confirm) { toast.error('Passwords do not match'); return; }
     setSaving(true);
-    const token = localStorage.getItem('cs_admin_token');
-    const res = await fetch('/api/admin/password', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ current: form.current, next: form.next }) });
+    const token = localStorage.getItem('cs_token');
+    const res = await fetch('/api/auth/password', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ current: form.current, next: form.next }) });
     const d = await res.json();
     if (d.ok) { toast.success('Password updated'); setForm({ current: '', next: '', confirm: '' }); }
     else toast.error(d.error || 'Failed to update');
