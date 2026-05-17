@@ -1,576 +1,734 @@
 #!/usr/bin/env python3
 """
-Backend API Testing for ChemistShop Pharmacy Ecommerce
-Tests all endpoints at /api/* on Next.js full-stack app
+Backend API Test Suite for NEW Admin Panel APIs
+Tests only the NEW endpoints added for admin panel functionality
 """
-
 import requests
 import json
-import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
-# Base URL from environment
-BASE_URL = "https://chemist-refresh.preview.emergentagent.com/api"
-TEST_USER_ID = "u-testuser"
+# Read base URL from .env
+BASE_URL = "https://chemist-refresh.preview.emergentagent.com"
+API_BASE = f"{BASE_URL}/api"
 
-# Test results tracking
-test_results = []
+def print_test(name, passed, details=""):
+    status = "✅ PASS" if passed else "❌ FAIL"
+    print(f"{status}: {name}")
+    if details:
+        print(f"   {details}")
+    print()
 
-def log_test(endpoint, status, reason):
-    """Log test result"""
-    result = f"{'✅ PASS' if status else '❌ FAIL'}: {endpoint} - {reason}"
-    print(result)
-    test_results.append({
-        'endpoint': endpoint,
-        'status': status,
-        'reason': reason
-    })
-    return status
-
-def test_health():
-    """Test 1: GET /api/health"""
+def test_admin_stats():
+    """Test 1: GET /api/admin/stats"""
+    print("=" * 80)
+    print("TEST 1: Admin Dashboard Stats")
+    print("=" * 80)
+    
     try:
-        response = requests.get(f"{BASE_URL}/health", timeout=10)
-        data = response.json()
+        resp = requests.get(f"{API_BASE}/admin/stats", timeout=10)
+        print(f"Status: {resp.status_code}")
         
-        if response.status_code == 200 and data.get('ok') == True and 'service' in data and 'time' in data:
-            return log_test("GET /api/health", True, f"Returns ok:true, service:{data.get('service')}, time present")
-        else:
-            return log_test("GET /api/health", False, f"Status {response.status_code}, data: {data}")
+        if resp.status_code != 200:
+            print_test("Admin Stats API", False, f"Expected 200, got {resp.status_code}")
+            return False
+        
+        data = resp.json()
+        
+        # Check all required keys
+        required_keys = [
+            'todayRevenue', 'todayOrders', 'weekRevenue', 'weekOrders',
+            'monthRevenue', 'monthOrders', 'productsCount', 'lowStockCount',
+            'lowStock', 'pendingCount', 'totalOrders', 'recent', 'series', 'topProducts'
+        ]
+        
+        missing = [k for k in required_keys if k not in data]
+        if missing:
+            print_test("Admin Stats - Required Keys", False, f"Missing keys: {missing}")
+            return False
+        
+        print_test("Admin Stats - Required Keys", True, "All keys present")
+        
+        # Verify productsCount = 30
+        if data['productsCount'] != 30:
+            print_test("Admin Stats - Products Count", False, f"Expected 30, got {data['productsCount']}")
+            return False
+        print_test("Admin Stats - Products Count", True, f"productsCount = {data['productsCount']}")
+        
+        # Verify lowStock array (<=8)
+        if len(data['lowStock']) > 8:
+            print_test("Admin Stats - Low Stock Array", False, f"Expected <=8, got {len(data['lowStock'])}")
+            return False
+        print_test("Admin Stats - Low Stock Array", True, f"lowStock count = {len(data['lowStock'])}")
+        
+        # Verify recent orders (<=8)
+        if len(data['recent']) > 8:
+            print_test("Admin Stats - Recent Orders", False, f"Expected <=8, got {len(data['recent'])}")
+            return False
+        
+        # Check recent order structure
+        if data['recent']:
+            order = data['recent'][0]
+            required_order_keys = ['id', 'total', 'status', 'address', 'items']
+            missing_order = [k for k in required_order_keys if k not in order]
+            if missing_order:
+                print_test("Admin Stats - Recent Order Structure", False, f"Missing: {missing_order}")
+                return False
+        
+        print_test("Admin Stats - Recent Orders", True, f"recent count = {len(data['recent'])}")
+        
+        # Verify series (7 days)
+        if len(data['series']) != 7:
+            print_test("Admin Stats - Series Length", False, f"Expected 7, got {len(data['series'])}")
+            return False
+        
+        # Check series structure
+        series_item = data['series'][0]
+        required_series = ['date', 'label', 'revenue', 'orders']
+        missing_series = [k for k in required_series if k not in series_item]
+        if missing_series:
+            print_test("Admin Stats - Series Structure", False, f"Missing: {missing_series}")
+            return False
+        
+        print_test("Admin Stats - Series", True, "7-day series with correct structure")
+        
+        # Verify topProducts (<=5)
+        if len(data['topProducts']) > 5:
+            print_test("Admin Stats - Top Products", False, f"Expected <=5, got {len(data['topProducts'])}")
+            return False
+        
+        print_test("Admin Stats - Top Products", True, f"topProducts count = {len(data['topProducts'])}")
+        
+        return True
+        
     except Exception as e:
-        return log_test("GET /api/health", False, f"Exception: {str(e)}")
+        print_test("Admin Stats API", False, f"Exception: {str(e)}")
+        return False
 
-def test_categories():
-    """Test 2: GET /api/categories"""
+def test_admin_revenue():
+    """Test 2: GET /api/admin/revenue with different ranges"""
+    print("=" * 80)
+    print("TEST 2: Admin Revenue Series")
+    print("=" * 80)
+    
+    all_passed = True
+    
+    # Test today
     try:
-        response = requests.get(f"{BASE_URL}/categories", timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and 'categories' in data:
-            categories = data['categories']
-            if len(categories) == 8:
-                # Check if categories have required fields
-                first_cat = categories[0]
-                if 'id' in first_cat and 'name' in first_cat and 'icon' in first_cat and 'color' in first_cat:
-                    return log_test("GET /api/categories", True, f"Returns 8 categories with id/name/icon/color")
+        resp = requests.get(f"{API_BASE}/admin/revenue?range=today", timeout=10)
+        if resp.status_code != 200:
+            print_test("Revenue - Today", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            data = resp.json()
+            if 'range' not in data or 'series' not in data or 'total' not in data:
+                print_test("Revenue - Today Structure", False, "Missing keys")
+                all_passed = False
+            elif len(data['series']) != 1:
+                print_test("Revenue - Today Series", False, f"Expected 1 day, got {len(data['series'])}")
+                all_passed = False
+            else:
+                # Check series item structure
+                item = data['series'][0]
+                if not all(k in item for k in ['revenue', 'orders', 'date', 'label']):
+                    print_test("Revenue - Today Item Structure", False, "Missing keys in series item")
+                    all_passed = False
                 else:
-                    return log_test("GET /api/categories", False, f"Categories missing required fields")
-            else:
-                return log_test("GET /api/categories", False, f"Expected 8 categories, got {len(categories)}")
-        else:
-            return log_test("GET /api/categories", False, f"Status {response.status_code}, data: {data}")
+                    print_test("Revenue - Today", True, f"1 day, total={data['total']}")
     except Exception as e:
-        return log_test("GET /api/categories", False, f"Exception: {str(e)}")
-
-def test_products_list():
-    """Test 3: GET /api/products - auto-seeds 30 products"""
-    try:
-        response = requests.get(f"{BASE_URL}/products", timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and 'products' in data and 'total' in data:
-            products = data['products']
-            if len(products) >= 30:
-                return log_test("GET /api/products", True, f"Returns {len(products)} products with total field (auto-seeded)")
-            else:
-                return log_test("GET /api/products", False, f"Expected at least 30 products, got {len(products)}")
-        else:
-            return log_test("GET /api/products", False, f"Status {response.status_code}, data: {data}")
-    except Exception as e:
-        return log_test("GET /api/products", False, f"Exception: {str(e)}")
-
-def test_products_filter_category():
-    """Test 3a: GET /api/products?category=medicines"""
-    try:
-        response = requests.get(f"{BASE_URL}/products?category=medicines", timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and 'products' in data:
-            products = data['products']
-            # Verify all products are medicines
-            all_medicines = all(p.get('category') == 'medicines' for p in products)
-            if all_medicines and len(products) > 0:
-                return log_test("GET /api/products?category=medicines", True, f"Returns {len(products)} medicines only")
-            elif len(products) == 0:
-                return log_test("GET /api/products?category=medicines", False, "No medicines found in products")
-            else:
-                return log_test("GET /api/products?category=medicines", False, "Some products are not medicines")
-        else:
-            return log_test("GET /api/products?category=medicines", False, f"Status {response.status_code}")
-    except Exception as e:
-        return log_test("GET /api/products?category=medicines", False, f"Exception: {str(e)}")
-
-def test_products_search():
-    """Test 3b: GET /api/products?search=crocin (case-insensitive)"""
-    try:
-        response = requests.get(f"{BASE_URL}/products?search=crocin", timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and 'products' in data:
-            products = data['products']
-            # Verify all products contain 'crocin' (case-insensitive)
-            if len(products) > 0:
-                all_match = all('crocin' in p.get('name', '').lower() for p in products)
-                if all_match:
-                    return log_test("GET /api/products?search=crocin", True, f"Returns {len(products)} products matching 'crocin' (case-insensitive)")
-                else:
-                    return log_test("GET /api/products?search=crocin", False, "Some products don't match search term")
-            else:
-                return log_test("GET /api/products?search=crocin", True, "No products match 'crocin' (acceptable if not in seed data)")
-        else:
-            return log_test("GET /api/products?search=crocin", False, f"Status {response.status_code}")
-    except Exception as e:
-        return log_test("GET /api/products?search=crocin", False, f"Exception: {str(e)}")
-
-def test_products_sort():
-    """Test 3c: GET /api/products?sort=price_asc,price_desc,rating,discount"""
-    results = []
+        print_test("Revenue - Today", False, f"Exception: {str(e)}")
+        all_passed = False
     
-    # Test price_asc
+    # Test week
     try:
-        response = requests.get(f"{BASE_URL}/products?sort=price_asc&limit=5", timeout=10)
-        data = response.json()
-        if response.status_code == 200 and 'products' in data:
-            products = data['products']
-            if len(products) >= 2:
-                prices = [p.get('price', 0) for p in products]
-                is_sorted = all(prices[i] <= prices[i+1] for i in range(len(prices)-1))
-                results.append(log_test("GET /api/products?sort=price_asc", is_sorted, f"Price ascending: {prices[:3]}..."))
-            else:
-                results.append(log_test("GET /api/products?sort=price_asc", False, "Not enough products to verify sorting"))
+        resp = requests.get(f"{API_BASE}/admin/revenue?range=week", timeout=10)
+        if resp.status_code != 200:
+            print_test("Revenue - Week", False, f"Status {resp.status_code}")
+            all_passed = False
         else:
-            results.append(log_test("GET /api/products?sort=price_asc", False, f"Status {response.status_code}"))
+            data = resp.json()
+            if len(data['series']) != 7:
+                print_test("Revenue - Week Series", False, f"Expected 7 days, got {len(data['series'])}")
+                all_passed = False
+            else:
+                print_test("Revenue - Week", True, f"7 days, total={data['total']}")
     except Exception as e:
-        results.append(log_test("GET /api/products?sort=price_asc", False, f"Exception: {str(e)}"))
+        print_test("Revenue - Week", False, f"Exception: {str(e)}")
+        all_passed = False
     
-    # Test price_desc
+    # Test month
     try:
-        response = requests.get(f"{BASE_URL}/products?sort=price_desc&limit=5", timeout=10)
-        data = response.json()
-        if response.status_code == 200 and 'products' in data:
-            products = data['products']
-            if len(products) >= 2:
-                prices = [p.get('price', 0) for p in products]
-                is_sorted = all(prices[i] >= prices[i+1] for i in range(len(prices)-1))
-                results.append(log_test("GET /api/products?sort=price_desc", is_sorted, f"Price descending: {prices[:3]}..."))
-            else:
-                results.append(log_test("GET /api/products?sort=price_desc", False, "Not enough products"))
+        resp = requests.get(f"{API_BASE}/admin/revenue?range=month", timeout=10)
+        if resp.status_code != 200:
+            print_test("Revenue - Month", False, f"Status {resp.status_code}")
+            all_passed = False
         else:
-            results.append(log_test("GET /api/products?sort=price_desc", False, f"Status {response.status_code}"))
+            data = resp.json()
+            if len(data['series']) != 30:
+                print_test("Revenue - Month Series", False, f"Expected 30 days, got {len(data['series'])}")
+                all_passed = False
+            else:
+                print_test("Revenue - Month", True, f"30 days, total={data['total']}")
     except Exception as e:
-        results.append(log_test("GET /api/products?sort=price_desc", False, f"Exception: {str(e)}"))
+        print_test("Revenue - Month", False, f"Exception: {str(e)}")
+        all_passed = False
     
-    # Test rating
-    try:
-        response = requests.get(f"{BASE_URL}/products?sort=rating&limit=5", timeout=10)
-        data = response.json()
-        if response.status_code == 200 and 'products' in data:
-            products = data['products']
-            if len(products) >= 2:
-                ratings = [p.get('rating', 0) for p in products]
-                is_sorted = all(ratings[i] >= ratings[i+1] for i in range(len(ratings)-1))
-                results.append(log_test("GET /api/products?sort=rating", is_sorted, f"Rating descending: {ratings[:3]}..."))
-            else:
-                results.append(log_test("GET /api/products?sort=rating", False, "Not enough products"))
-        else:
-            results.append(log_test("GET /api/products?sort=rating", False, f"Status {response.status_code}"))
-    except Exception as e:
-        results.append(log_test("GET /api/products?sort=rating", False, f"Exception: {str(e)}"))
+    return all_passed
+
+def test_admin_orders():
+    """Test 3: GET /api/admin/orders with filters"""
+    print("=" * 80)
+    print("TEST 3: Admin Orders List with Filters")
+    print("=" * 80)
     
-    # Test discount (sorts by mrp desc)
-    try:
-        response = requests.get(f"{BASE_URL}/products?sort=discount&limit=5", timeout=10)
-        data = response.json()
-        if response.status_code == 200 and 'products' in data:
-            products = data['products']
-            if len(products) >= 2:
-                mrps = [p.get('mrp', 0) for p in products]
-                is_sorted = all(mrps[i] >= mrps[i+1] for i in range(len(mrps)-1))
-                results.append(log_test("GET /api/products?sort=discount", is_sorted, f"MRP descending: {mrps[:3]}..."))
-            else:
-                results.append(log_test("GET /api/products?sort=discount", False, "Not enough products"))
-        else:
-            results.append(log_test("GET /api/products?sort=discount", False, f"Status {response.status_code}"))
-    except Exception as e:
-        results.append(log_test("GET /api/products?sort=discount", False, f"Exception: {str(e)}"))
+    all_passed = True
     
-    return all(results)
-
-def test_products_limit():
-    """Test 3d: GET /api/products?limit=5"""
+    # Test without filters
     try:
-        response = requests.get(f"{BASE_URL}/products?limit=5", timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and 'products' in data:
-            products = data['products']
-            if len(products) == 5:
-                return log_test("GET /api/products?limit=5", True, f"Returns exactly 5 products")
+        resp = requests.get(f"{API_BASE}/admin/orders", timeout=10)
+        if resp.status_code != 200:
+            print_test("Admin Orders - No Filter", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            data = resp.json()
+            orders = data.get('orders', [])
+            if len(orders) < 20:
+                print_test("Admin Orders - Count", False, f"Expected at least 20, got {len(orders)}")
+                all_passed = False
             else:
-                return log_test("GET /api/products?limit=5", False, f"Expected 5 products, got {len(products)}")
-        else:
-            return log_test("GET /api/products?limit=5", False, f"Status {response.status_code}")
+                print_test("Admin Orders - No Filter", True, f"Retrieved {len(orders)} orders")
     except Exception as e:
-        return log_test("GET /api/products?limit=5", False, f"Exception: {str(e)}")
-
-def test_product_detail():
-    """Test 4: GET /api/products/:id (using p-007 BP Monitor)"""
+        print_test("Admin Orders - No Filter", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    # Test with status filter
     try:
-        response = requests.get(f"{BASE_URL}/products/p-007", timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and 'product' in data and 'related' in data:
-            product = data['product']
-            related = data['related']
-            
-            # Verify product has correct id
-            if product.get('id') == 'p-007':
-                # Verify related items are same category but exclude self
-                product_category = product.get('category')
-                related_valid = all(r.get('category') == product_category and r.get('id') != 'p-007' for r in related)
-                
-                if related_valid:
-                    return log_test("GET /api/products/p-007", True, f"Returns product + {len(related)} related items (same category, excludes self)")
-                else:
-                    return log_test("GET /api/products/p-007", False, "Related items validation failed")
+        resp = requests.get(f"{API_BASE}/admin/orders?status=Delivered", timeout=10)
+        if resp.status_code != 200:
+            print_test("Admin Orders - Status Filter", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            data = resp.json()
+            orders = data.get('orders', [])
+            # Verify all have status = Delivered
+            non_delivered = [o for o in orders if o.get('status') != 'Delivered']
+            if non_delivered:
+                print_test("Admin Orders - Status Filter", False, f"{len(non_delivered)} orders not Delivered")
+                all_passed = False
             else:
-                return log_test("GET /api/products/p-007", False, f"Wrong product id: {product.get('id')}")
-        else:
-            return log_test("GET /api/products/p-007", False, f"Status {response.status_code}, data: {data}")
+                print_test("Admin Orders - Status Filter", True, f"All {len(orders)} orders are Delivered")
     except Exception as e:
-        return log_test("GET /api/products/p-007", False, f"Exception: {str(e)}")
-
-def test_product_not_found():
-    """Test 4a: GET /api/products/:id with non-existent id"""
+        print_test("Admin Orders - Status Filter", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    # Test with search filter (using 'Aaruhi' from seeded data)
     try:
-        response = requests.get(f"{BASE_URL}/products/non-existent-id-12345", timeout=10)
-        
-        if response.status_code == 404:
-            return log_test("GET /api/products/non-existent-id", True, "Returns 404 for non-existent product")
+        resp = requests.get(f"{API_BASE}/admin/orders?search=Aaruhi", timeout=10)
+        if resp.status_code != 200:
+            print_test("Admin Orders - Search Filter", False, f"Status {resp.status_code}")
+            all_passed = False
         else:
-            return log_test("GET /api/products/non-existent-id", False, f"Expected 404, got {response.status_code}")
+            data = resp.json()
+            orders = data.get('orders', [])
+            # Verify all match the search
+            matched = all('Aaruhi' in o.get('address', {}).get('name', '') for o in orders)
+            if not matched:
+                print_test("Admin Orders - Search Filter", False, "Some orders don't match search")
+                all_passed = False
+            else:
+                print_test("Admin Orders - Search Filter", True, f"Found {len(orders)} orders for 'Aaruhi'")
     except Exception as e:
-        return log_test("GET /api/products/non-existent-id", False, f"Exception: {str(e)}")
+        print_test("Admin Orders - Search Filter", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    return all_passed
 
-def test_create_order():
-    """Test 5: POST /api/orders"""
+def test_products_crud():
+    """Test 4: Products CRUD operations"""
+    print("=" * 80)
+    print("TEST 4: Products CRUD")
+    print("=" * 80)
+    
+    all_passed = True
+    created_id = None
+    
+    # POST - Create product
     try:
-        order_data = {
-            "userId": TEST_USER_ID,
-            "items": [
-                {
-                    "id": "p-007",
-                    "name": "BP Monitor",
-                    "price": 1299,
-                    "mrp": 1999,
-                    "image": "/images/bp-monitor.jpg",
-                    "qty": 1
-                }
-            ],
-            "address": {
-                "name": "John Doe",
-                "phone": "9876543210",
-                "line1": "123 Medical Street",
-                "city": "Mumbai",
-                "state": "Maharashtra",
-                "pincode": "400001",
-                "type": "home"
-            },
-            "payment": "COD",
-            "subtotal": 1299,
-            "discount": 0,
-            "deliveryFee": 50,
-            "total": 1349
+        payload = {
+            "name": "Test Aspirin 75mg",
+            "brand": "TestBrand",
+            "category": "medicines",
+            "price": 25,
+            "mrp": 30,
+            "stock": 100,
+            "packSize": "Strip of 10",
+            "images": ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="],
+            "prescription": False,
+            "description": "Test desc"
         }
-        
-        response = requests.post(f"{BASE_URL}/orders", json=order_data, timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and 'order' in data:
-            order = data['order']
+        resp = requests.post(f"{API_BASE}/products", json=payload, timeout=10)
+        if resp.status_code != 200:
+            print_test("Products - Create", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            data = resp.json()
+            product = data.get('product', {})
+            created_id = product.get('id')
             
-            # Verify order structure
-            checks = [
-                order.get('id', '').startswith('ORD-'),
-                order.get('status') == 'Confirmed',
-                'trackingSteps' in order and isinstance(order['trackingSteps'], list),
-                'estimatedDelivery' in order,
-                order.get('userId') == TEST_USER_ID
+            # Verify id starts with 'p-'
+            if not created_id or not created_id.startswith('p-'):
+                print_test("Products - Create ID", False, f"ID doesn't start with 'p-': {created_id}")
+                all_passed = False
+            else:
+                print_test("Products - Create ID", True, f"ID = {created_id}")
+            
+            # Verify image = images[0]
+            if product.get('image') != payload['images'][0]:
+                print_test("Products - Create Image", False, "image != images[0]")
+                all_passed = False
+            else:
+                print_test("Products - Create Image", True, "image = images[0]")
+    except Exception as e:
+        print_test("Products - Create", False, f"Exception: {str(e)}")
+        all_passed = False
+        return False
+    
+    if not created_id:
+        print("Cannot continue CRUD tests without created product ID")
+        return False
+    
+    # GET - Retrieve product
+    try:
+        resp = requests.get(f"{API_BASE}/products/{created_id}", timeout=10)
+        if resp.status_code != 200:
+            print_test("Products - Get", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            data = resp.json()
+            product = data.get('product', {})
+            if product.get('id') != created_id:
+                print_test("Products - Get", False, "Product ID mismatch")
+                all_passed = False
+            else:
+                print_test("Products - Get", True, f"Retrieved product {created_id}")
+    except Exception as e:
+        print_test("Products - Get", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    # PUT - Update product
+    try:
+        update_payload = {
+            "price": 22,
+            "stock": 50,
+            "name": "Test Aspirin 75mg Updated"
+        }
+        resp = requests.put(f"{API_BASE}/products/{created_id}", json=update_payload, timeout=10)
+        if resp.status_code != 200:
+            print_test("Products - Update", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            data = resp.json()
+            product = data.get('product', {})
+            
+            # Verify changes
+            if product.get('price') != 22 or product.get('stock') != 50 or product.get('name') != "Test Aspirin 75mg Updated":
+                print_test("Products - Update", False, "Changes not applied correctly")
+                all_passed = False
+            else:
+                print_test("Products - Update", True, "Price, stock, and name updated")
+        
+        # Verify persistence with GET
+        resp = requests.get(f"{API_BASE}/products/{created_id}", timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            product = data.get('product', {})
+            if product.get('price') == 22 and product.get('stock') == 50:
+                print_test("Products - Update Persistence", True, "Changes persisted")
+            else:
+                print_test("Products - Update Persistence", False, "Changes not persisted")
+                all_passed = False
+    except Exception as e:
+        print_test("Products - Update", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    # DELETE - Remove product
+    try:
+        resp = requests.delete(f"{API_BASE}/products/{created_id}", timeout=10)
+        if resp.status_code != 200:
+            print_test("Products - Delete", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            print_test("Products - Delete", True, f"Deleted product {created_id}")
+        
+        # Verify deletion with GET (should return 404)
+        resp = requests.get(f"{API_BASE}/products/{created_id}", timeout=10)
+        if resp.status_code != 404:
+            print_test("Products - Delete Verification", False, f"Expected 404, got {resp.status_code}")
+            all_passed = False
+        else:
+            print_test("Products - Delete Verification", True, "Product not found after deletion")
+    except Exception as e:
+        print_test("Products - Delete", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    return all_passed
+
+def test_order_status_update():
+    """Test 5: Order status update"""
+    print("=" * 80)
+    print("TEST 5: Order Status Update")
+    print("=" * 80)
+    
+    all_passed = True
+    
+    # Get first order
+    try:
+        resp = requests.get(f"{API_BASE}/admin/orders", timeout=10)
+        if resp.status_code != 200:
+            print_test("Order Status - Get Orders", False, f"Status {resp.status_code}")
+            return False
+        
+        data = resp.json()
+        orders = data.get('orders', [])
+        if not orders:
+            print_test("Order Status - Get Orders", False, "No orders found")
+            return False
+        
+        order_id = orders[0]['id']
+        print(f"Testing with order ID: {order_id}")
+        
+        # PATCH - Update to Confirmed
+        update_payload = {"status": "Confirmed"}
+        resp = requests.patch(f"{API_BASE}/orders/{order_id}", json=update_payload, timeout=10)
+        if resp.status_code != 200:
+            print_test("Order Status - Update to Confirmed", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            data = resp.json()
+            order = data.get('order', {})
+            
+            # Verify status
+            if order.get('status') != 'Confirmed':
+                print_test("Order Status - Confirmed Status", False, f"Status is {order.get('status')}")
+                all_passed = False
+            else:
+                print_test("Order Status - Confirmed Status", True)
+            
+            # Verify trackingSteps
+            steps = order.get('trackingSteps', [])
+            if len(steps) != 4:
+                print_test("Order Status - Tracking Steps Count", False, f"Expected 4, got {len(steps)}")
+                all_passed = False
+            else:
+                # Order Confirmed: true, Packed: true, Out for Delivery: false, Delivered: false
+                expected = [True, True, False, False]
+                actual = [s.get('done') for s in steps]
+                if actual != expected:
+                    print_test("Order Status - Confirmed Tracking", False, f"Expected {expected}, got {actual}")
+                    all_passed = False
+                else:
+                    print_test("Order Status - Confirmed Tracking", True, "Order Confirmed & Packed done")
+        
+        # PATCH - Update to Delivered
+        update_payload = {"status": "Delivered"}
+        resp = requests.patch(f"{API_BASE}/orders/{order_id}", json=update_payload, timeout=10)
+        if resp.status_code != 200:
+            print_test("Order Status - Update to Delivered", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            data = resp.json()
+            order = data.get('order', {})
+            
+            # Verify all tracking steps done
+            steps = order.get('trackingSteps', [])
+            all_done = all(s.get('done') for s in steps)
+            if not all_done:
+                print_test("Order Status - Delivered Tracking", False, "Not all steps done")
+                all_passed = False
+            else:
+                print_test("Order Status - Delivered Tracking", True, "All 4 tracking steps done")
+        
+    except Exception as e:
+        print_test("Order Status Update", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    return all_passed
+
+def test_slots_crud():
+    """Test 6: Delivery Slots CRUD"""
+    print("=" * 80)
+    print("TEST 6: Delivery Slots CRUD")
+    print("=" * 80)
+    
+    all_passed = True
+    created_slot_id = None
+    
+    # GET - List slots (should have at least 5 default)
+    try:
+        resp = requests.get(f"{API_BASE}/slots", timeout=10)
+        if resp.status_code != 200:
+            print_test("Slots - List", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            data = resp.json()
+            slots = data.get('slots', [])
+            if len(slots) < 5:
+                print_test("Slots - Default Count", False, f"Expected at least 5, got {len(slots)}")
+                all_passed = False
+            else:
+                # Check for slot-1 through slot-5
+                slot_ids = [s.get('id') for s in slots]
+                has_defaults = all(f'slot-{i}' in slot_ids for i in range(1, 6))
+                if not has_defaults:
+                    print_test("Slots - Default IDs", False, "Missing default slots slot-1 to slot-5")
+                    all_passed = False
+                else:
+                    print_test("Slots - List", True, f"Found {len(slots)} slots including defaults")
+    except Exception as e:
+        print_test("Slots - List", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    # POST - Create slot
+    try:
+        payload = {
+            "label": "Late Night",
+            "startTime": "20:00",
+            "endTime": "22:00",
+            "capacity": 5,
+            "active": True
+        }
+        resp = requests.post(f"{API_BASE}/slots", json=payload, timeout=10)
+        if resp.status_code != 200:
+            print_test("Slots - Create", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            data = resp.json()
+            slot = data.get('slot', {})
+            created_slot_id = slot.get('id')
+            
+            # Verify id starts with 'slot-'
+            if not created_slot_id or not created_slot_id.startswith('slot-'):
+                print_test("Slots - Create ID", False, f"ID doesn't start with 'slot-': {created_slot_id}")
+                all_passed = False
+            else:
+                print_test("Slots - Create", True, f"Created slot {created_slot_id}")
+    except Exception as e:
+        print_test("Slots - Create", False, f"Exception: {str(e)}")
+        all_passed = False
+        return False
+    
+    if not created_slot_id:
+        print("Cannot continue slot tests without created slot ID")
+        return False
+    
+    # PUT - Update slot
+    try:
+        update_payload = {
+            "active": False,
+            "capacity": 3
+        }
+        resp = requests.put(f"{API_BASE}/slots/{created_slot_id}", json=update_payload, timeout=10)
+        if resp.status_code != 200:
+            print_test("Slots - Update", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            data = resp.json()
+            slot = data.get('slot', {})
+            
+            # Verify changes
+            if slot.get('active') != False or slot.get('capacity') != 3:
+                print_test("Slots - Update", False, "Changes not applied correctly")
+                all_passed = False
+            else:
+                print_test("Slots - Update", True, "active=false, capacity=3")
+    except Exception as e:
+        print_test("Slots - Update", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    # GET - Available slots
+    try:
+        tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+        resp = requests.get(f"{API_BASE}/slots/available?date={tomorrow}", timeout=10)
+        if resp.status_code != 200:
+            print_test("Slots - Available", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            data = resp.json()
+            slots = data.get('slots', [])
+            
+            # Should only include active slots (our created one is inactive now)
+            inactive_slots = [s for s in slots if not s.get('active')]
+            if inactive_slots:
+                print_test("Slots - Available (Active Only)", False, f"Found {len(inactive_slots)} inactive slots")
+                all_passed = False
+            else:
+                # Check structure (booked & available)
+                if slots:
+                    slot = slots[0]
+                    if 'booked' not in slot or 'available' not in slot:
+                        print_test("Slots - Available Structure", False, "Missing booked/available")
+                        all_passed = False
+                    elif slot.get('available', -1) < 0:
+                        print_test("Slots - Available Count", False, "available < 0")
+                        all_passed = False
+                    else:
+                        print_test("Slots - Available", True, f"{len(slots)} active slots with booked/available counts")
+                else:
+                    print_test("Slots - Available", True, "No active slots (expected if all inactive)")
+    except Exception as e:
+        print_test("Slots - Available", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    # DELETE - Remove slot
+    try:
+        resp = requests.delete(f"{API_BASE}/slots/{created_slot_id}", timeout=10)
+        if resp.status_code != 200:
+            print_test("Slots - Delete", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            print_test("Slots - Delete", True, f"Deleted slot {created_slot_id}")
+        
+        # Verify deletion
+        resp = requests.get(f"{API_BASE}/slots", timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            slots = data.get('slots', [])
+            if any(s.get('id') == created_slot_id for s in slots):
+                print_test("Slots - Delete Verification", False, "Slot still exists")
+                all_passed = False
+            else:
+                print_test("Slots - Delete Verification", True, "Slot removed from list")
+    except Exception as e:
+        print_test("Slots - Delete", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    return all_passed
+
+def test_settings():
+    """Test 7: Shop Settings GET/PUT"""
+    print("=" * 80)
+    print("TEST 7: Shop Settings")
+    print("=" * 80)
+    
+    all_passed = True
+    
+    # GET - Retrieve settings
+    try:
+        resp = requests.get(f"{API_BASE}/settings", timeout=10)
+        if resp.status_code != 200:
+            print_test("Settings - Get", False, f"Status {resp.status_code}")
+            all_passed = False
+        else:
+            data = resp.json()
+            settings = data.get('settings', {})
+            
+            # Check required keys
+            required = [
+                'shopName', 'contactPhone', 'contactEmail', 'address',
+                'deliveryCharge', 'freeDeliveryAbove', 'minOrderValue',
+                'businessHours', 'slotsEnabled'
             ]
-            
-            if all(checks):
-                # Store order id for later tests
-                global created_order_id
-                created_order_id = order['id']
-                return log_test("POST /api/orders", True, f"Created order {order['id']} with status 'Confirmed', tracking steps, estimated delivery")
+            missing = [k for k in required if k not in settings]
+            if missing:
+                print_test("Settings - Required Keys", False, f"Missing: {missing}")
+                all_passed = False
             else:
-                return log_test("POST /api/orders", False, f"Order structure validation failed: {order}")
-        else:
-            return log_test("POST /api/orders", False, f"Status {response.status_code}, data: {data}")
-    except Exception as e:
-        return log_test("POST /api/orders", False, f"Exception: {str(e)}")
-
-def test_list_orders():
-    """Test 6: GET /api/orders?userId=u-testuser"""
-    try:
-        response = requests.get(f"{BASE_URL}/orders?userId={TEST_USER_ID}", timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and 'orders' in data:
-            orders = data['orders']
-            
-            # Check if the created order is in the list
-            if len(orders) > 0:
-                # Look for our created order
-                found = any(o.get('userId') == TEST_USER_ID for o in orders)
-                if found:
-                    return log_test("GET /api/orders?userId", True, f"Returns {len(orders)} orders for user {TEST_USER_ID}")
+                # Check businessHours structure
+                bh = settings.get('businessHours', {})
+                if 'open' not in bh or 'close' not in bh:
+                    print_test("Settings - Business Hours", False, "Missing open/close")
+                    all_passed = False
                 else:
-                    return log_test("GET /api/orders?userId", False, "Created order not found in list")
-            else:
-                return log_test("GET /api/orders?userId", False, "No orders returned (expected at least one)")
-        else:
-            return log_test("GET /api/orders?userId", False, f"Status {response.status_code}")
+                    print_test("Settings - Get", True, f"shopName={settings.get('shopName')}, slotsEnabled={settings.get('slotsEnabled')}")
     except Exception as e:
-        return log_test("GET /api/orders?userId", False, f"Exception: {str(e)}")
-
-def test_get_order():
-    """Test 7: GET /api/orders/:id"""
+        print_test("Settings - Get", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    # PUT - Update settings
     try:
-        if 'created_order_id' not in globals():
-            return log_test("GET /api/orders/:id", False, "No order id available (create order test may have failed)")
-        
-        response = requests.get(f"{BASE_URL}/orders/{created_order_id}", timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and 'order' in data:
-            order = data['order']
-            if order.get('id') == created_order_id:
-                return log_test("GET /api/orders/:id", True, f"Returns order {created_order_id}")
-            else:
-                return log_test("GET /api/orders/:id", False, f"Wrong order returned: {order.get('id')}")
-        else:
-            return log_test("GET /api/orders/:id", False, f"Status {response.status_code}")
-    except Exception as e:
-        return log_test("GET /api/orders/:id", False, f"Exception: {str(e)}")
-
-def test_create_prescription():
-    """Test 8: POST /api/prescriptions"""
-    try:
-        prescription_data = {
-            "userId": TEST_USER_ID,
-            "patientName": "Jane Smith",
-            "phone": "9876543210",
-            "notes": "Need medicines for fever and cold",
-            "fileName": "prescription_jan2026.pdf",
-            "fileDataUrl": "data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvTWVkaWFCb3hbMCAwIDYxMiA3OTJdL1BhcmVudCAyIDAgUi9SZXNvdXJjZXM8PD4+Pj4KZW5kb2JqCnhyZWYKMCA0CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNSAwMDAwMCBuIAowMDAwMDAwMDY0IDAwMDAwIG4gCjAwMDAwMDAxMjEgMDAwMDAgbiAKdHJhaWxlcgo8PC9TaXplIDQvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgoyMTQKJSVFT0YK"
+        update_payload = {
+            "shopName": "ChemistShop Premium",
+            "deliveryCharge": 59,
+            "slotsEnabled": False
         }
-        
-        response = requests.post(f"{BASE_URL}/prescriptions", json=prescription_data, timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and 'prescription' in data:
-            prescription = data['prescription']
-            
-            # Verify prescription structure
-            checks = [
-                prescription.get('id', '').startswith('RX-'),
-                prescription.get('status') == 'Under Review',
-                prescription.get('userId') == TEST_USER_ID,
-                'fileDataUrl' not in prescription  # Should NOT include fileDataUrl in response
-            ]
-            
-            if all(checks):
-                # Store prescription id for later tests
-                global created_prescription_id
-                created_prescription_id = prescription['id']
-                return log_test("POST /api/prescriptions", True, f"Created prescription {prescription['id']} with status 'Under Review', fileDataUrl NOT in response")
-            else:
-                return log_test("POST /api/prescriptions", False, f"Prescription validation failed: {prescription}")
+        resp = requests.put(f"{API_BASE}/settings", json=update_payload, timeout=10)
+        if resp.status_code != 200:
+            print_test("Settings - Update", False, f"Status {resp.status_code}")
+            all_passed = False
         else:
-            return log_test("POST /api/prescriptions", False, f"Status {response.status_code}, data: {data}")
+            data = resp.json()
+            settings = data.get('settings', {})
+            
+            # Verify changes
+            if settings.get('shopName') != "ChemistShop Premium" or settings.get('deliveryCharge') != 59 or settings.get('slotsEnabled') != False:
+                print_test("Settings - Update", False, "Changes not applied")
+                all_passed = False
+            else:
+                print_test("Settings - Update", True, "shopName, deliveryCharge, slotsEnabled updated")
+        
+        # Verify persistence
+        resp = requests.get(f"{API_BASE}/settings", timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            settings = data.get('settings', {})
+            if settings.get('shopName') == "ChemistShop Premium" and settings.get('deliveryCharge') == 59:
+                print_test("Settings - Update Persistence", True, "Changes persisted")
+            else:
+                print_test("Settings - Update Persistence", False, "Changes not persisted")
+                all_passed = False
     except Exception as e:
-        return log_test("POST /api/prescriptions", False, f"Exception: {str(e)}")
-
-def test_list_prescriptions():
-    """Test 9: GET /api/prescriptions?userId=u-testuser"""
+        print_test("Settings - Update", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    # Restore slotsEnabled for downstream tests
     try:
-        response = requests.get(f"{BASE_URL}/prescriptions?userId={TEST_USER_ID}", timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and 'prescriptions' in data:
-            prescriptions = data['prescriptions']
-            
-            if len(prescriptions) > 0:
-                # Look for our created prescription
-                found = any(p.get('userId') == TEST_USER_ID for p in prescriptions)
-                if found:
-                    return log_test("GET /api/prescriptions?userId", True, f"Returns {len(prescriptions)} prescriptions for user {TEST_USER_ID}")
-                else:
-                    return log_test("GET /api/prescriptions?userId", False, "Created prescription not found")
-            else:
-                return log_test("GET /api/prescriptions?userId", False, "No prescriptions returned (expected at least one)")
+        restore_payload = {"slotsEnabled": True}
+        resp = requests.put(f"{API_BASE}/settings", json=restore_payload, timeout=10)
+        if resp.status_code == 200:
+            print_test("Settings - Restore slotsEnabled", True, "Restored slotsEnabled=true")
         else:
-            return log_test("GET /api/prescriptions?userId", False, f"Status {response.status_code}")
+            print_test("Settings - Restore slotsEnabled", False, f"Status {resp.status_code}")
+            all_passed = False
     except Exception as e:
-        return log_test("GET /api/prescriptions?userId", False, f"Exception: {str(e)}")
-
-def test_create_address():
-    """Test 10: POST /api/addresses"""
-    try:
-        address_data = {
-            "userId": TEST_USER_ID,
-            "name": "Alice Johnson",
-            "phone": "9123456789",
-            "line1": "456 Health Avenue, Apt 5B",
-            "city": "Delhi",
-            "state": "Delhi",
-            "pincode": "110001",
-            "type": "work"
-        }
-        
-        response = requests.post(f"{BASE_URL}/addresses", json=address_data, timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and 'address' in data:
-            address = data['address']
-            
-            # Verify address structure
-            if address.get('id', '').startswith('ADDR-') and address.get('userId') == TEST_USER_ID:
-                # Store address id for later tests
-                global created_address_id
-                created_address_id = address['id']
-                return log_test("POST /api/addresses", True, f"Created address {address['id']} with id starting 'ADDR-'")
-            else:
-                return log_test("POST /api/addresses", False, f"Address validation failed: {address}")
-        else:
-            return log_test("POST /api/addresses", False, f"Status {response.status_code}, data: {data}")
-    except Exception as e:
-        return log_test("POST /api/addresses", False, f"Exception: {str(e)}")
-
-def test_list_addresses():
-    """Test 11: GET /api/addresses?userId=u-testuser"""
-    try:
-        response = requests.get(f"{BASE_URL}/addresses?userId={TEST_USER_ID}", timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and 'addresses' in data:
-            addresses = data['addresses']
-            
-            if len(addresses) > 0:
-                # Look for our created address
-                found = any(a.get('userId') == TEST_USER_ID for a in addresses)
-                if found:
-                    return log_test("GET /api/addresses?userId", True, f"Returns {len(addresses)} addresses for user {TEST_USER_ID}")
-                else:
-                    return log_test("GET /api/addresses?userId", False, "Created address not found")
-            else:
-                return log_test("GET /api/addresses?userId", False, "No addresses returned (expected at least one)")
-        else:
-            return log_test("GET /api/addresses?userId", False, f"Status {response.status_code}")
-    except Exception as e:
-        return log_test("GET /api/addresses?userId", False, f"Exception: {str(e)}")
-
-def test_delete_address():
-    """Test 12: DELETE /api/addresses/:id"""
-    try:
-        if 'created_address_id' not in globals():
-            return log_test("DELETE /api/addresses/:id", False, "No address id available (create address test may have failed)")
-        
-        response = requests.delete(f"{BASE_URL}/addresses/{created_address_id}", timeout=10)
-        data = response.json()
-        
-        if response.status_code == 200 and data.get('ok') == True:
-            # Verify address is deleted by trying to fetch it
-            list_response = requests.get(f"{BASE_URL}/addresses?userId={TEST_USER_ID}", timeout=10)
-            list_data = list_response.json()
-            
-            if 'addresses' in list_data:
-                addresses = list_data['addresses']
-                still_exists = any(a.get('id') == created_address_id for a in addresses)
-                
-                if not still_exists:
-                    return log_test("DELETE /api/addresses/:id", True, f"Deleted address {created_address_id}, verified not in list")
-                else:
-                    return log_test("DELETE /api/addresses/:id", False, "Address still exists after deletion")
-            else:
-                return log_test("DELETE /api/addresses/:id", True, f"Deleted address {created_address_id} (ok:true)")
-        else:
-            return log_test("DELETE /api/addresses/:id", False, f"Status {response.status_code}, data: {data}")
-    except Exception as e:
-        return log_test("DELETE /api/addresses/:id", False, f"Exception: {str(e)}")
-
-def test_cors_preflight():
-    """Test 13: OPTIONS preflight (CORS)"""
-    try:
-        response = requests.options(f"{BASE_URL}/products", timeout=10)
-        
-        if response.status_code == 204:
-            headers = response.headers
-            cors_origin = headers.get('Access-Control-Allow-Origin')
-            
-            if cors_origin == '*':
-                return log_test("OPTIONS /api/* (CORS)", True, f"Returns 204 with Access-Control-Allow-Origin: *")
-            else:
-                return log_test("OPTIONS /api/* (CORS)", False, f"CORS header: {cors_origin}")
-        else:
-            return log_test("OPTIONS /api/* (CORS)", False, f"Expected 204, got {response.status_code}")
-    except Exception as e:
-        return log_test("OPTIONS /api/* (CORS)", False, f"Exception: {str(e)}")
+        print_test("Settings - Restore", False, f"Exception: {str(e)}")
+        all_passed = False
+    
+    return all_passed
 
 def main():
-    """Run all backend tests"""
+    print("\n" + "=" * 80)
+    print("BACKEND API TEST SUITE - NEW ADMIN PANEL ENDPOINTS")
     print("=" * 80)
-    print("ChemistShop Backend API Testing")
     print(f"Base URL: {BASE_URL}")
-    print(f"Test User: {TEST_USER_ID}")
-    print("=" * 80)
-    print()
+    print(f"API Base: {API_BASE}")
+    print("=" * 80 + "\n")
     
-    # Run all tests in sequence
-    test_health()
-    test_categories()
-    test_products_list()
-    test_products_filter_category()
-    test_products_search()
-    test_products_sort()
-    test_products_limit()
-    test_product_detail()
-    test_product_not_found()
-    test_create_order()
-    test_list_orders()
-    test_get_order()
-    test_create_prescription()
-    test_list_prescriptions()
-    test_create_address()
-    test_list_addresses()
-    test_delete_address()
-    test_cors_preflight()
+    results = {}
+    
+    # Run all tests
+    results['Admin Stats'] = test_admin_stats()
+    results['Admin Revenue'] = test_admin_revenue()
+    results['Admin Orders'] = test_admin_orders()
+    results['Products CRUD'] = test_products_crud()
+    results['Order Status Update'] = test_order_status_update()
+    results['Slots CRUD'] = test_slots_crud()
+    results['Settings'] = test_settings()
     
     # Summary
-    print()
-    print("=" * 80)
+    print("\n" + "=" * 80)
     print("TEST SUMMARY")
     print("=" * 80)
     
-    passed = sum(1 for r in test_results if r['status'])
-    failed = sum(1 for r in test_results if not r['status'])
-    total = len(test_results)
+    for test_name, passed in results.items():
+        status = "✅ PASS" if passed else "❌ FAIL"
+        print(f"{status}: {test_name}")
     
-    print(f"Total: {total} | Passed: {passed} | Failed: {failed}")
-    print()
+    total = len(results)
+    passed = sum(1 for v in results.values() if v)
+    print(f"\nTotal: {passed}/{total} test sections passed")
+    print("=" * 80 + "\n")
     
-    if failed > 0:
-        print("FAILED TESTS:")
-        for r in test_results:
-            if not r['status']:
-                print(f"  ❌ {r['endpoint']}: {r['reason']}")
-        print()
-    
-    print("=" * 80)
-    
-    # Exit with appropriate code
-    sys.exit(0 if failed == 0 else 1)
+    return all(results.values())
 
 if __name__ == "__main__":
-    main()
+    success = main()
+    exit(0 if success else 1)

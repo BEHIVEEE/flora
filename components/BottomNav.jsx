@@ -15,6 +15,7 @@ const items = [
 const BottomNav = () => {
   const pathname = usePathname();
   const { totalQty } = useCart() || { totalQty: 0 };
+  if (pathname?.startsWith('/admin')) return null;
   return (
     <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.06)]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="grid grid-cols-5">

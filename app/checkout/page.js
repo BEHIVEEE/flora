@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useCart } from '@/components/CartProvider';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { ShieldCheck, Truck, Wallet, CreditCard, Smartphone, ChevronRight, MapPin, Lock } from 'lucide-react';
+import { ShieldCheck, Truck, Wallet, CreditCard, Smartphone, ChevronRight, MapPin, Lock, Clock, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 
 const CheckoutPage = () => {
@@ -18,8 +18,23 @@ const CheckoutPage = () => {
   const [address, setAddress] = useState({ name: '', phone: '', email: '', line1: '', line2: '', city: 'Mumbai', state: 'Maharashtra', pincode: '', type: 'Home' });
   const [payment, setPayment] = useState('COD');
   const [placing, setPlacing] = useState(false);
+  const [slotsEnabled, setSlotsEnabled] = useState(true);
+  const [slotDate, setSlotDate] = useState(() => {
+    const d = new Date(Date.now() + 86400000); return d.toISOString().slice(0, 10);
+  });
+  const [slots, setSlots] = useState([]);
+  const [slotId, setSlotId] = useState('');
   const deliveryFee = (subtotal || 0) >= 499 ? 0 : 49;
   const total = (subtotal || 0) + deliveryFee;
+
+  useEffect(() => { fetch('/api/settings').then(r => r.json()).then(d => setSlotsEnabled(d.settings?.slotsEnabled !== false)); }, []);
+  useEffect(() => {
+    if (!slotsEnabled) return;
+    fetch(`/api/slots/available?date=${slotDate}`).then(r => r.json()).then(d => {
+      setSlots(d.slots || []);
+      if (!slotId && d.slots?.length) setSlotId(d.slots.find(s => s.available > 0)?.id || '');
+    });
+  }, [slotDate, slotsEnabled]);
 
   if (!items || items.length === 0) {
     return (
@@ -41,12 +56,13 @@ const CheckoutPage = () => {
   };
 
   const placeOrder = async () => {
+    if (slotsEnabled && !slotId) { toast.error('Please choose a delivery slot'); return; }
     setPlacing(true);
     try {
       const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, items, address, payment, subtotal, discount: savings, deliveryFee, total }),
+        body: JSON.stringify({ userId, items, address, payment, subtotal, discount: savings, deliveryFee, total, slotId: slotsEnabled ? slotId : null, slotDate: slotsEnabled ? slotDate : null }),
       });
       const data = await res.json();
       if (data.order) {
@@ -96,9 +112,49 @@ const CheckoutPage = () => {
               </div>
             </div>
 
-            {/* Step 2: payment */}
+            {/* Step 2: delivery slot */}
+            {slotsEnabled && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                <div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-sm">2</div><h3 className="font-bold text-slate-900">Choose Delivery Slot</h3></div>
+                <div className="mb-4">
+                  <Label className="text-xs font-semibold text-slate-700">Delivery date</Label>
+                  <div className="flex gap-2 mt-2 overflow-x-auto scrollbar-hide">
+                    {Array(7).fill(0).map((_, i) => {
+                      const d = new Date(Date.now() + (i + 1) * 86400000);
+                      const iso = d.toISOString().slice(0, 10);
+                      const active = slotDate === iso;
+                      return (
+                        <button key={iso} type="button" onClick={() => setSlotDate(iso)} className={`shrink-0 min-w-[78px] px-3 py-2.5 rounded-xl border text-center transition-all ${active ? 'bg-teal-600 text-white border-teal-600 shadow-lift' : 'bg-white border-slate-200 hover:border-teal-300'}`}>
+                          <div className={`text-[10px] font-bold uppercase ${active ? 'text-teal-50' : 'text-slate-500'}`}>{d.toLocaleDateString('en-IN', { weekday: 'short' })}</div>
+                          <div className={`text-lg font-black leading-none mt-0.5 ${active ? 'text-white' : 'text-slate-900'}`}>{d.getDate()}</div>
+                          <div className={`text-[10px] ${active ? 'text-teal-50' : 'text-slate-500'}`}>{d.toLocaleDateString('en-IN', { month: 'short' })}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {slots.length === 0 && <div className="col-span-2 text-sm text-slate-500 text-center p-4">No slots configured. Contact support.</div>}
+                  {slots.map(s => {
+                    const full = s.available <= 0;
+                    const sel = slotId === s.id;
+                    return (
+                      <button key={s.id} type="button" disabled={full} onClick={() => setSlotId(s.id)} className={`text-left p-3 rounded-xl border-2 transition-all ${full ? 'border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed' : sel ? 'border-teal-500 bg-teal-50/60 ring-2 ring-teal-100' : 'border-slate-200 hover:border-teal-300 bg-white'}`}>
+                        <div className="flex items-center gap-2"><Clock className={`w-4 h-4 ${sel ? 'text-teal-700' : 'text-slate-500'}`} /><div className="font-bold text-slate-900 text-sm">{s.startTime} – {s.endTime}</div></div>
+                        <div className="flex items-center justify-between mt-1">
+                          <div className="text-xs text-slate-500">{s.label}</div>
+                          <div className={`text-[11px] font-bold ${full ? 'text-rose-600' : s.available <= 3 ? 'text-amber-600' : 'text-emerald-600'}`}>{full ? 'Full' : `${s.available} left`}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: payment */}
             <div className="bg-white rounded-2xl border border-slate-200 p-5">
-              <div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-sm">2</div><h3 className="font-bold text-slate-900">Payment Method</h3></div>
+              <div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-sm">{slotsEnabled ? 3 : 2}</div><h3 className="font-bold text-slate-900">Payment Method</h3></div>
               <RadioGroup value={payment} onValueChange={setPayment} className="space-y-2">
                 {[
                   { id: 'UPI', label: 'UPI', sub: 'GPay, PhonePe, Paytm, BHIM', icon: Smartphone, badge: 'Instant' },

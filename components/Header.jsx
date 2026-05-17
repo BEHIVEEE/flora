@@ -22,6 +22,8 @@ const Header = () => {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  if (pathname?.startsWith('/admin')) return null;
+
   const onSearch = (e) => {
     e.preventDefault();
     if (q.trim()) router.push(`/products?search=${encodeURIComponent(q.trim())}`);
