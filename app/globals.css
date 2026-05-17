@@ -2,13 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+:root { color-scheme: light; }
+
 html, body {
     margin: 0;
     padding: 0;
+    background-color: #ffffff;
+    color: #0f172a;
     font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+}
+
+@media (prefers-color-scheme: dark) {
+  html, body { background-color: #ffffff !important; color: #0f172a !important; }
 }
 
 @layer base {

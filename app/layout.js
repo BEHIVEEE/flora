@@ -19,8 +19,8 @@ export const viewport = { themeColor: '#0d9488', width: 'device-width', initialS
 
 const App = ({ children }) => {
   return (
-    <html lang="en" className={inter.variable}>
-      <body className="min-h-screen bg-background font-sans antialiased pb-20 md:pb-0">
+    <html lang="en" className={inter.variable} style={{ colorScheme: 'light' }}>
+      <body className="min-h-screen bg-white text-slate-900 font-sans antialiased pb-20 md:pb-0">
         <CartProvider>
           <Header />
           <main className="min-h-[60vh]">{children}</main>
