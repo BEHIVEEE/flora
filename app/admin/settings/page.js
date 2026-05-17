@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Save, Store, Phone, MapPin, Truck, Clock, ToggleRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -81,6 +81,37 @@ const Settings = () => {
             <Switch checked={s.slotsEnabled} onCheckedChange={v => u('slotsEnabled', v)} />
           </div>
         </Card>
+
+        <Card icon={ToggleRight} title="Change Admin Password" subtitle="Secure your admin access">
+          <ChangePasswordForm />
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+const ChangePasswordForm = () => {
+  const [form, setForm] = React.useState({ current: '', next: '', confirm: '' });
+  const [saving, setSaving] = React.useState(false);
+  const submit = async () => {
+    if (!form.current || !form.next) { toast.error('Fill all fields'); return; }
+    if (form.next.length < 6) { toast.error('New password must be at least 6 characters'); return; }
+    if (form.next !== form.confirm) { toast.error('Passwords do not match'); return; }
+    setSaving(true);
+    const token = localStorage.getItem('cs_admin_token');
+    const res = await fetch('/api/admin/password', { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ current: form.current, next: form.next }) });
+    const d = await res.json();
+    if (d.ok) { toast.success('Password updated'); setForm({ current: '', next: '', confirm: '' }); }
+    else toast.error(d.error || 'Failed to update');
+    setSaving(false);
+  };
+  return (
+    <div className="grid md:grid-cols-3 gap-3">
+      <Field label="Current Password" type="password" value={form.current} onChange={v => setForm({ ...form, current: v })} />
+      <Field label="New Password" type="password" value={form.next} onChange={v => setForm({ ...form, next: v })} />
+      <Field label="Confirm New" type="password" value={form.confirm} onChange={v => setForm({ ...form, confirm: v })} />
+      <div className="md:col-span-3">
+        <Button onClick={submit} disabled={saving} className="bg-teal-600 hover:bg-teal-700 rounded-full font-semibold">{saving ? 'Updating…' : 'Update Password'}</Button>
       </div>
     </div>
   );

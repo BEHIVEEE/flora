@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, Search, Edit3, Trash2, Filter, Package } from 'lucide-react';
+import { Plus, Search, Edit3, Trash2, Filter, Package, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -40,7 +40,10 @@ const ProductsList = () => {
           <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Products</h1>
           <p className="text-slate-500 text-sm mt-0.5">{products ? `${products.length} products` : 'Loading…'}</p>
         </div>
-        <Link href="/admin/products/new"><Button className="bg-teal-600 hover:bg-teal-700 rounded-full h-10 font-semibold"><Plus className="w-4 h-4 mr-1" /> Add Product</Button></Link>
+        <div className="flex gap-2">
+          <Link href="/admin/products/import"><Button variant="outline" className="rounded-full h-10 font-semibold"><Upload className="w-4 h-4 mr-1" /> Import CSV</Button></Link>
+          <Link href="/admin/products/new"><Button className="bg-teal-600 hover:bg-teal-700 rounded-full h-10 font-semibold"><Plus className="w-4 h-4 mr-1" /> Add Product</Button></Link>
+        </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-2xl p-4">

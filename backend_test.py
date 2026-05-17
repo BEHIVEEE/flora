@@ -1,734 +1,650 @@
 #!/usr/bin/env python3
 """
-Backend API Test Suite for NEW Admin Panel APIs
-Tests only the NEW endpoints added for admin panel functionality
+ChemistShop Admin v3 Backend Test Suite
+Tests 5 new endpoint groups: Auth, Bulk Import, Customer Analytics, Inventory, Prescription Chat
 """
+
 import requests
 import json
-from datetime import datetime, timedelta
+import sys
 
-# Read base URL from .env
-BASE_URL = "https://chemist-refresh.preview.emergentagent.com"
-API_BASE = f"{BASE_URL}/api"
+# Read base URL from environment
+BASE_URL = "https://chemist-refresh.preview.emergentagent.com/api"
+ADMIN_EMAIL = "admin@chemistshop.top"
+ADMIN_PASSWORD = "admin123"
 
-def print_test(name, passed, details=""):
+# Global token storage
+auth_token = None
+test_results = {
+    "auth": {"passed": 0, "failed": 0, "details": []},
+    "bulk_import": {"passed": 0, "failed": 0, "details": []},
+    "customer_analytics": {"passed": 0, "failed": 0, "details": []},
+    "inventory": {"passed": 0, "failed": 0, "details": []},
+    "prescription_chat": {"passed": 0, "failed": 0, "details": []},
+}
+
+def log_result(group, test_name, passed, message=""):
+    """Log test result"""
     status = "✅ PASS" if passed else "❌ FAIL"
-    print(f"{status}: {name}")
-    if details:
-        print(f"   {details}")
-    print()
+    print(f"{status}: {group} - {test_name}")
+    if message:
+        print(f"  → {message}")
+    
+    test_results[group]["passed" if passed else "failed"] += 1
+    test_results[group]["details"].append({
+        "test": test_name,
+        "passed": passed,
+        "message": message
+    })
 
-def test_admin_stats():
-    """Test 1: GET /api/admin/stats"""
-    print("=" * 80)
-    print("TEST 1: Admin Dashboard Stats")
-    print("=" * 80)
+def test_auth():
+    """Test 1: Admin Authentication"""
+    global auth_token
+    print("\n=== Testing AUTH Endpoints ===")
     
+    # 1.1: POST /api/admin/login - Success
     try:
-        resp = requests.get(f"{API_BASE}/admin/stats", timeout=10)
-        print(f"Status: {resp.status_code}")
+        resp = requests.post(f"{BASE_URL}/admin/login", json={
+            "email": ADMIN_EMAIL,
+            "password": ADMIN_PASSWORD
+        }, timeout=10)
         
-        if resp.status_code != 200:
-            print_test("Admin Stats API", False, f"Expected 200, got {resp.status_code}")
-            return False
-        
-        data = resp.json()
-        
-        # Check all required keys
-        required_keys = [
-            'todayRevenue', 'todayOrders', 'weekRevenue', 'weekOrders',
-            'monthRevenue', 'monthOrders', 'productsCount', 'lowStockCount',
-            'lowStock', 'pendingCount', 'totalOrders', 'recent', 'series', 'topProducts'
-        ]
-        
-        missing = [k for k in required_keys if k not in data]
-        if missing:
-            print_test("Admin Stats - Required Keys", False, f"Missing keys: {missing}")
-            return False
-        
-        print_test("Admin Stats - Required Keys", True, "All keys present")
-        
-        # Verify productsCount = 30
-        if data['productsCount'] != 30:
-            print_test("Admin Stats - Products Count", False, f"Expected 30, got {data['productsCount']}")
-            return False
-        print_test("Admin Stats - Products Count", True, f"productsCount = {data['productsCount']}")
-        
-        # Verify lowStock array (<=8)
-        if len(data['lowStock']) > 8:
-            print_test("Admin Stats - Low Stock Array", False, f"Expected <=8, got {len(data['lowStock'])}")
-            return False
-        print_test("Admin Stats - Low Stock Array", True, f"lowStock count = {len(data['lowStock'])}")
-        
-        # Verify recent orders (<=8)
-        if len(data['recent']) > 8:
-            print_test("Admin Stats - Recent Orders", False, f"Expected <=8, got {len(data['recent'])}")
-            return False
-        
-        # Check recent order structure
-        if data['recent']:
-            order = data['recent'][0]
-            required_order_keys = ['id', 'total', 'status', 'address', 'items']
-            missing_order = [k for k in required_order_keys if k not in order]
-            if missing_order:
-                print_test("Admin Stats - Recent Order Structure", False, f"Missing: {missing_order}")
-                return False
-        
-        print_test("Admin Stats - Recent Orders", True, f"recent count = {len(data['recent'])}")
-        
-        # Verify series (7 days)
-        if len(data['series']) != 7:
-            print_test("Admin Stats - Series Length", False, f"Expected 7, got {len(data['series'])}")
-            return False
-        
-        # Check series structure
-        series_item = data['series'][0]
-        required_series = ['date', 'label', 'revenue', 'orders']
-        missing_series = [k for k in required_series if k not in series_item]
-        if missing_series:
-            print_test("Admin Stats - Series Structure", False, f"Missing: {missing_series}")
-            return False
-        
-        print_test("Admin Stats - Series", True, "7-day series with correct structure")
-        
-        # Verify topProducts (<=5)
-        if len(data['topProducts']) > 5:
-            print_test("Admin Stats - Top Products", False, f"Expected <=5, got {len(data['topProducts'])}")
-            return False
-        
-        print_test("Admin Stats - Top Products", True, f"topProducts count = {len(data['topProducts'])}")
-        
-        return True
-        
-    except Exception as e:
-        print_test("Admin Stats API", False, f"Exception: {str(e)}")
-        return False
-
-def test_admin_revenue():
-    """Test 2: GET /api/admin/revenue with different ranges"""
-    print("=" * 80)
-    print("TEST 2: Admin Revenue Series")
-    print("=" * 80)
-    
-    all_passed = True
-    
-    # Test today
-    try:
-        resp = requests.get(f"{API_BASE}/admin/revenue?range=today", timeout=10)
-        if resp.status_code != 200:
-            print_test("Revenue - Today", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            if 'range' not in data or 'series' not in data or 'total' not in data:
-                print_test("Revenue - Today Structure", False, "Missing keys")
-                all_passed = False
-            elif len(data['series']) != 1:
-                print_test("Revenue - Today Series", False, f"Expected 1 day, got {len(data['series'])}")
-                all_passed = False
-            else:
-                # Check series item structure
-                item = data['series'][0]
-                if not all(k in item for k in ['revenue', 'orders', 'date', 'label']):
-                    print_test("Revenue - Today Item Structure", False, "Missing keys in series item")
-                    all_passed = False
-                else:
-                    print_test("Revenue - Today", True, f"1 day, total={data['total']}")
-    except Exception as e:
-        print_test("Revenue - Today", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    # Test week
-    try:
-        resp = requests.get(f"{API_BASE}/admin/revenue?range=week", timeout=10)
-        if resp.status_code != 200:
-            print_test("Revenue - Week", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            if len(data['series']) != 7:
-                print_test("Revenue - Week Series", False, f"Expected 7 days, got {len(data['series'])}")
-                all_passed = False
-            else:
-                print_test("Revenue - Week", True, f"7 days, total={data['total']}")
-    except Exception as e:
-        print_test("Revenue - Week", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    # Test month
-    try:
-        resp = requests.get(f"{API_BASE}/admin/revenue?range=month", timeout=10)
-        if resp.status_code != 200:
-            print_test("Revenue - Month", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            if len(data['series']) != 30:
-                print_test("Revenue - Month Series", False, f"Expected 30 days, got {len(data['series'])}")
-                all_passed = False
-            else:
-                print_test("Revenue - Month", True, f"30 days, total={data['total']}")
-    except Exception as e:
-        print_test("Revenue - Month", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    return all_passed
-
-def test_admin_orders():
-    """Test 3: GET /api/admin/orders with filters"""
-    print("=" * 80)
-    print("TEST 3: Admin Orders List with Filters")
-    print("=" * 80)
-    
-    all_passed = True
-    
-    # Test without filters
-    try:
-        resp = requests.get(f"{API_BASE}/admin/orders", timeout=10)
-        if resp.status_code != 200:
-            print_test("Admin Orders - No Filter", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            orders = data.get('orders', [])
-            if len(orders) < 20:
-                print_test("Admin Orders - Count", False, f"Expected at least 20, got {len(orders)}")
-                all_passed = False
-            else:
-                print_test("Admin Orders - No Filter", True, f"Retrieved {len(orders)} orders")
-    except Exception as e:
-        print_test("Admin Orders - No Filter", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    # Test with status filter
-    try:
-        resp = requests.get(f"{API_BASE}/admin/orders?status=Delivered", timeout=10)
-        if resp.status_code != 200:
-            print_test("Admin Orders - Status Filter", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            orders = data.get('orders', [])
-            # Verify all have status = Delivered
-            non_delivered = [o for o in orders if o.get('status') != 'Delivered']
-            if non_delivered:
-                print_test("Admin Orders - Status Filter", False, f"{len(non_delivered)} orders not Delivered")
-                all_passed = False
-            else:
-                print_test("Admin Orders - Status Filter", True, f"All {len(orders)} orders are Delivered")
-    except Exception as e:
-        print_test("Admin Orders - Status Filter", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    # Test with search filter (using 'Aaruhi' from seeded data)
-    try:
-        resp = requests.get(f"{API_BASE}/admin/orders?search=Aaruhi", timeout=10)
-        if resp.status_code != 200:
-            print_test("Admin Orders - Search Filter", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            orders = data.get('orders', [])
-            # Verify all match the search
-            matched = all('Aaruhi' in o.get('address', {}).get('name', '') for o in orders)
-            if not matched:
-                print_test("Admin Orders - Search Filter", False, "Some orders don't match search")
-                all_passed = False
-            else:
-                print_test("Admin Orders - Search Filter", True, f"Found {len(orders)} orders for 'Aaruhi'")
-    except Exception as e:
-        print_test("Admin Orders - Search Filter", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    return all_passed
-
-def test_products_crud():
-    """Test 4: Products CRUD operations"""
-    print("=" * 80)
-    print("TEST 4: Products CRUD")
-    print("=" * 80)
-    
-    all_passed = True
-    created_id = None
-    
-    # POST - Create product
-    try:
-        payload = {
-            "name": "Test Aspirin 75mg",
-            "brand": "TestBrand",
-            "category": "medicines",
-            "price": 25,
-            "mrp": 30,
-            "stock": 100,
-            "packSize": "Strip of 10",
-            "images": ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="],
-            "prescription": False,
-            "description": "Test desc"
-        }
-        resp = requests.post(f"{API_BASE}/products", json=payload, timeout=10)
-        if resp.status_code != 200:
-            print_test("Products - Create", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            product = data.get('product', {})
-            created_id = product.get('id')
-            
-            # Verify id starts with 'p-'
-            if not created_id or not created_id.startswith('p-'):
-                print_test("Products - Create ID", False, f"ID doesn't start with 'p-': {created_id}")
-                all_passed = False
-            else:
-                print_test("Products - Create ID", True, f"ID = {created_id}")
-            
-            # Verify image = images[0]
-            if product.get('image') != payload['images'][0]:
-                print_test("Products - Create Image", False, "image != images[0]")
-                all_passed = False
-            else:
-                print_test("Products - Create Image", True, "image = images[0]")
-    except Exception as e:
-        print_test("Products - Create", False, f"Exception: {str(e)}")
-        all_passed = False
-        return False
-    
-    if not created_id:
-        print("Cannot continue CRUD tests without created product ID")
-        return False
-    
-    # GET - Retrieve product
-    try:
-        resp = requests.get(f"{API_BASE}/products/{created_id}", timeout=10)
-        if resp.status_code != 200:
-            print_test("Products - Get", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            product = data.get('product', {})
-            if product.get('id') != created_id:
-                print_test("Products - Get", False, "Product ID mismatch")
-                all_passed = False
-            else:
-                print_test("Products - Get", True, f"Retrieved product {created_id}")
-    except Exception as e:
-        print_test("Products - Get", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    # PUT - Update product
-    try:
-        update_payload = {
-            "price": 22,
-            "stock": 50,
-            "name": "Test Aspirin 75mg Updated"
-        }
-        resp = requests.put(f"{API_BASE}/products/{created_id}", json=update_payload, timeout=10)
-        if resp.status_code != 200:
-            print_test("Products - Update", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            product = data.get('product', {})
-            
-            # Verify changes
-            if product.get('price') != 22 or product.get('stock') != 50 or product.get('name') != "Test Aspirin 75mg Updated":
-                print_test("Products - Update", False, "Changes not applied correctly")
-                all_passed = False
-            else:
-                print_test("Products - Update", True, "Price, stock, and name updated")
-        
-        # Verify persistence with GET
-        resp = requests.get(f"{API_BASE}/products/{created_id}", timeout=10)
         if resp.status_code == 200:
             data = resp.json()
-            product = data.get('product', {})
-            if product.get('price') == 22 and product.get('stock') == 50:
-                print_test("Products - Update Persistence", True, "Changes persisted")
+            if data.get("ok") and data.get("token") and data.get("user", {}).get("role") == "owner":
+                auth_token = data["token"]
+                log_result("auth", "POST /api/admin/login (success)", True, f"Token received, role={data['user']['role']}")
             else:
-                print_test("Products - Update Persistence", False, "Changes not persisted")
-                all_passed = False
+                log_result("auth", "POST /api/admin/login (success)", False, f"Invalid response structure: {data}")
+        else:
+            log_result("auth", "POST /api/admin/login (success)", False, f"Status {resp.status_code}: {resp.text}")
     except Exception as e:
-        print_test("Products - Update", False, f"Exception: {str(e)}")
-        all_passed = False
+        log_result("auth", "POST /api/admin/login (success)", False, str(e))
     
-    # DELETE - Remove product
+    # 1.2: POST /api/admin/login - Wrong password (401)
     try:
-        resp = requests.delete(f"{API_BASE}/products/{created_id}", timeout=10)
-        if resp.status_code != 200:
-            print_test("Products - Delete", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            print_test("Products - Delete", True, f"Deleted product {created_id}")
+        resp = requests.post(f"{BASE_URL}/admin/login", json={
+            "email": ADMIN_EMAIL,
+            "password": "wrongpassword"
+        }, timeout=10)
         
-        # Verify deletion with GET (should return 404)
-        resp = requests.get(f"{API_BASE}/products/{created_id}", timeout=10)
-        if resp.status_code != 404:
-            print_test("Products - Delete Verification", False, f"Expected 404, got {resp.status_code}")
-            all_passed = False
-        else:
-            print_test("Products - Delete Verification", True, "Product not found after deletion")
-    except Exception as e:
-        print_test("Products - Delete", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    return all_passed
-
-def test_order_status_update():
-    """Test 5: Order status update"""
-    print("=" * 80)
-    print("TEST 5: Order Status Update")
-    print("=" * 80)
-    
-    all_passed = True
-    
-    # Get first order
-    try:
-        resp = requests.get(f"{API_BASE}/admin/orders", timeout=10)
-        if resp.status_code != 200:
-            print_test("Order Status - Get Orders", False, f"Status {resp.status_code}")
-            return False
-        
-        data = resp.json()
-        orders = data.get('orders', [])
-        if not orders:
-            print_test("Order Status - Get Orders", False, "No orders found")
-            return False
-        
-        order_id = orders[0]['id']
-        print(f"Testing with order ID: {order_id}")
-        
-        # PATCH - Update to Confirmed
-        update_payload = {"status": "Confirmed"}
-        resp = requests.patch(f"{API_BASE}/orders/{order_id}", json=update_payload, timeout=10)
-        if resp.status_code != 200:
-            print_test("Order Status - Update to Confirmed", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
+        if resp.status_code == 401:
             data = resp.json()
-            order = data.get('order', {})
-            
-            # Verify status
-            if order.get('status') != 'Confirmed':
-                print_test("Order Status - Confirmed Status", False, f"Status is {order.get('status')}")
-                all_passed = False
+            if data.get("ok") == False:
+                log_result("auth", "POST /api/admin/login (wrong password → 401)", True, "Correctly rejected")
             else:
-                print_test("Order Status - Confirmed Status", True)
-            
-            # Verify trackingSteps
-            steps = order.get('trackingSteps', [])
-            if len(steps) != 4:
-                print_test("Order Status - Tracking Steps Count", False, f"Expected 4, got {len(steps)}")
-                all_passed = False
-            else:
-                # Order Confirmed: true, Packed: true, Out for Delivery: false, Delivered: false
-                expected = [True, True, False, False]
-                actual = [s.get('done') for s in steps]
-                if actual != expected:
-                    print_test("Order Status - Confirmed Tracking", False, f"Expected {expected}, got {actual}")
-                    all_passed = False
-                else:
-                    print_test("Order Status - Confirmed Tracking", True, "Order Confirmed & Packed done")
+                log_result("auth", "POST /api/admin/login (wrong password → 401)", False, f"Expected ok:false, got {data}")
+        else:
+            log_result("auth", "POST /api/admin/login (wrong password → 401)", False, f"Expected 401, got {resp.status_code}")
+    except Exception as e:
+        log_result("auth", "POST /api/admin/login (wrong password → 401)", False, str(e))
+    
+    # 1.3: GET /api/admin/me - With valid token (200)
+    try:
+        resp = requests.get(f"{BASE_URL}/admin/me", headers={
+            "Authorization": f"Bearer {auth_token}"
+        }, timeout=10)
         
-        # PATCH - Update to Delivered
-        update_payload = {"status": "Delivered"}
-        resp = requests.patch(f"{API_BASE}/orders/{order_id}", json=update_payload, timeout=10)
-        if resp.status_code != 200:
-            print_test("Order Status - Update to Delivered", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            order = data.get('order', {})
-            
-            # Verify all tracking steps done
-            steps = order.get('trackingSteps', [])
-            all_done = all(s.get('done') for s in steps)
-            if not all_done:
-                print_test("Order Status - Delivered Tracking", False, "Not all steps done")
-                all_passed = False
-            else:
-                print_test("Order Status - Delivered Tracking", True, "All 4 tracking steps done")
-        
-    except Exception as e:
-        print_test("Order Status Update", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    return all_passed
-
-def test_slots_crud():
-    """Test 6: Delivery Slots CRUD"""
-    print("=" * 80)
-    print("TEST 6: Delivery Slots CRUD")
-    print("=" * 80)
-    
-    all_passed = True
-    created_slot_id = None
-    
-    # GET - List slots (should have at least 5 default)
-    try:
-        resp = requests.get(f"{API_BASE}/slots", timeout=10)
-        if resp.status_code != 200:
-            print_test("Slots - List", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            slots = data.get('slots', [])
-            if len(slots) < 5:
-                print_test("Slots - Default Count", False, f"Expected at least 5, got {len(slots)}")
-                all_passed = False
-            else:
-                # Check for slot-1 through slot-5
-                slot_ids = [s.get('id') for s in slots]
-                has_defaults = all(f'slot-{i}' in slot_ids for i in range(1, 6))
-                if not has_defaults:
-                    print_test("Slots - Default IDs", False, "Missing default slots slot-1 to slot-5")
-                    all_passed = False
-                else:
-                    print_test("Slots - List", True, f"Found {len(slots)} slots including defaults")
-    except Exception as e:
-        print_test("Slots - List", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    # POST - Create slot
-    try:
-        payload = {
-            "label": "Late Night",
-            "startTime": "20:00",
-            "endTime": "22:00",
-            "capacity": 5,
-            "active": True
-        }
-        resp = requests.post(f"{API_BASE}/slots", json=payload, timeout=10)
-        if resp.status_code != 200:
-            print_test("Slots - Create", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            slot = data.get('slot', {})
-            created_slot_id = slot.get('id')
-            
-            # Verify id starts with 'slot-'
-            if not created_slot_id or not created_slot_id.startswith('slot-'):
-                print_test("Slots - Create ID", False, f"ID doesn't start with 'slot-': {created_slot_id}")
-                all_passed = False
-            else:
-                print_test("Slots - Create", True, f"Created slot {created_slot_id}")
-    except Exception as e:
-        print_test("Slots - Create", False, f"Exception: {str(e)}")
-        all_passed = False
-        return False
-    
-    if not created_slot_id:
-        print("Cannot continue slot tests without created slot ID")
-        return False
-    
-    # PUT - Update slot
-    try:
-        update_payload = {
-            "active": False,
-            "capacity": 3
-        }
-        resp = requests.put(f"{API_BASE}/slots/{created_slot_id}", json=update_payload, timeout=10)
-        if resp.status_code != 200:
-            print_test("Slots - Update", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            slot = data.get('slot', {})
-            
-            # Verify changes
-            if slot.get('active') != False or slot.get('capacity') != 3:
-                print_test("Slots - Update", False, "Changes not applied correctly")
-                all_passed = False
-            else:
-                print_test("Slots - Update", True, "active=false, capacity=3")
-    except Exception as e:
-        print_test("Slots - Update", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    # GET - Available slots
-    try:
-        tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
-        resp = requests.get(f"{API_BASE}/slots/available?date={tomorrow}", timeout=10)
-        if resp.status_code != 200:
-            print_test("Slots - Available", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            slots = data.get('slots', [])
-            
-            # Should only include active slots (our created one is inactive now)
-            inactive_slots = [s for s in slots if not s.get('active')]
-            if inactive_slots:
-                print_test("Slots - Available (Active Only)", False, f"Found {len(inactive_slots)} inactive slots")
-                all_passed = False
-            else:
-                # Check structure (booked & available)
-                if slots:
-                    slot = slots[0]
-                    if 'booked' not in slot or 'available' not in slot:
-                        print_test("Slots - Available Structure", False, "Missing booked/available")
-                        all_passed = False
-                    elif slot.get('available', -1) < 0:
-                        print_test("Slots - Available Count", False, "available < 0")
-                        all_passed = False
-                    else:
-                        print_test("Slots - Available", True, f"{len(slots)} active slots with booked/available counts")
-                else:
-                    print_test("Slots - Available", True, "No active slots (expected if all inactive)")
-    except Exception as e:
-        print_test("Slots - Available", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    # DELETE - Remove slot
-    try:
-        resp = requests.delete(f"{API_BASE}/slots/{created_slot_id}", timeout=10)
-        if resp.status_code != 200:
-            print_test("Slots - Delete", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            print_test("Slots - Delete", True, f"Deleted slot {created_slot_id}")
-        
-        # Verify deletion
-        resp = requests.get(f"{API_BASE}/slots", timeout=10)
         if resp.status_code == 200:
             data = resp.json()
-            slots = data.get('slots', [])
-            if any(s.get('id') == created_slot_id for s in slots):
-                print_test("Slots - Delete Verification", False, "Slot still exists")
-                all_passed = False
+            if data.get("ok") and data.get("user"):
+                log_result("auth", "GET /api/admin/me (with bearer → 200)", True, f"User: {data['user'].get('email')}")
             else:
-                print_test("Slots - Delete Verification", True, "Slot removed from list")
-    except Exception as e:
-        print_test("Slots - Delete", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    return all_passed
-
-def test_settings():
-    """Test 7: Shop Settings GET/PUT"""
-    print("=" * 80)
-    print("TEST 7: Shop Settings")
-    print("=" * 80)
-    
-    all_passed = True
-    
-    # GET - Retrieve settings
-    try:
-        resp = requests.get(f"{API_BASE}/settings", timeout=10)
-        if resp.status_code != 200:
-            print_test("Settings - Get", False, f"Status {resp.status_code}")
-            all_passed = False
+                log_result("auth", "GET /api/admin/me (with bearer → 200)", False, f"Invalid response: {data}")
         else:
+            log_result("auth", "GET /api/admin/me (with bearer → 200)", False, f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("auth", "GET /api/admin/me (with bearer → 200)", False, str(e))
+    
+    # 1.4: GET /api/admin/me - Without token (401)
+    try:
+        resp = requests.get(f"{BASE_URL}/admin/me", timeout=10)
+        
+        if resp.status_code == 401:
+            log_result("auth", "GET /api/admin/me (no bearer → 401)", True, "Correctly rejected")
+        else:
+            log_result("auth", "GET /api/admin/me (no bearer → 401)", False, f"Expected 401, got {resp.status_code}")
+    except Exception as e:
+        log_result("auth", "GET /api/admin/me (no bearer → 401)", False, str(e))
+    
+    # 1.5: GET /api/admin/me - Invalid token (401)
+    try:
+        resp = requests.get(f"{BASE_URL}/admin/me", headers={
+            "Authorization": "Bearer invalid-token-xyz"
+        }, timeout=10)
+        
+        if resp.status_code == 401:
+            log_result("auth", "GET /api/admin/me (invalid bearer → 401)", True, "Correctly rejected")
+        else:
+            log_result("auth", "GET /api/admin/me (invalid bearer → 401)", False, f"Expected 401, got {resp.status_code}")
+    except Exception as e:
+        log_result("auth", "GET /api/admin/me (invalid bearer → 401)", False, str(e))
+    
+    # 1.6: PUT /api/admin/password - Change to 'admin456'
+    try:
+        resp = requests.put(f"{BASE_URL}/admin/password", 
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"current": ADMIN_PASSWORD, "next": "admin456"},
+            timeout=10)
+        
+        if resp.status_code == 200:
             data = resp.json()
-            settings = data.get('settings', {})
-            
-            # Check required keys
-            required = [
-                'shopName', 'contactPhone', 'contactEmail', 'address',
-                'deliveryCharge', 'freeDeliveryAbove', 'minOrderValue',
-                'businessHours', 'slotsEnabled'
+            if data.get("ok"):
+                log_result("auth", "PUT /api/admin/password (change to admin456)", True, "Password changed")
+            else:
+                log_result("auth", "PUT /api/admin/password (change to admin456)", False, f"Response: {data}")
+        else:
+            log_result("auth", "PUT /api/admin/password (change to admin456)", False, f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("auth", "PUT /api/admin/password (change to admin456)", False, str(e))
+    
+    # 1.7: Re-login with new password 'admin456'
+    try:
+        resp = requests.post(f"{BASE_URL}/admin/login", json={
+            "email": ADMIN_EMAIL,
+            "password": "admin456"
+        }, timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("ok") and data.get("token"):
+                auth_token = data["token"]
+                log_result("auth", "POST /api/admin/login (with admin456)", True, "Login successful with new password")
+            else:
+                log_result("auth", "POST /api/admin/login (with admin456)", False, f"Invalid response: {data}")
+        else:
+            log_result("auth", "POST /api/admin/login (with admin456)", False, f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("auth", "POST /api/admin/login (with admin456)", False, str(e))
+    
+    # 1.8: PUT /api/admin/password - Change back to 'admin123'
+    try:
+        resp = requests.put(f"{BASE_URL}/admin/password", 
+            headers={"Authorization": f"Bearer {auth_token}"},
+            json={"current": "admin456", "next": ADMIN_PASSWORD},
+            timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("ok"):
+                log_result("auth", "PUT /api/admin/password (change back to admin123)", True, "Password restored")
+            else:
+                log_result("auth", "PUT /api/admin/password (change back to admin123)", False, f"Response: {data}")
+        else:
+            log_result("auth", "PUT /api/admin/password (change back to admin123)", False, f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("auth", "PUT /api/admin/password (change back to admin123)", False, str(e))
+
+def test_bulk_import():
+    """Test 2: Bulk Product Import"""
+    print("\n=== Testing BULK IMPORT Endpoints ===")
+    
+    # 2.1: POST /api/products/bulk with 2 products
+    try:
+        resp = requests.post(f"{BASE_URL}/products/bulk", json={
+            "products": [
+                {
+                    "name": "CSV Test A",
+                    "brand": "T",
+                    "category": "medicines",
+                    "price": 50,
+                    "stock": 10,
+                    "packSize": "Strip",
+                    "description": "x",
+                    "prescription": "false",
+                    "imageUrl": "https://example.com/a.png"
+                },
+                {
+                    "name": "CSV Test B",
+                    "category": "wellness",
+                    "price": 80,
+                    "mrp": 100,
+                    "stock": 5,
+                    "imageUrl": "https://example.com/b.png"
+                }
             ]
-            missing = [k for k in required if k not in settings]
-            if missing:
-                print_test("Settings - Required Keys", False, f"Missing: {missing}")
-                all_passed = False
-            else:
-                # Check businessHours structure
-                bh = settings.get('businessHours', {})
-                if 'open' not in bh or 'close' not in bh:
-                    print_test("Settings - Business Hours", False, "Missing open/close")
-                    all_passed = False
-                else:
-                    print_test("Settings - Get", True, f"shopName={settings.get('shopName')}, slotsEnabled={settings.get('slotsEnabled')}")
-    except Exception as e:
-        print_test("Settings - Get", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    # PUT - Update settings
-    try:
-        update_payload = {
-            "shopName": "ChemistShop Premium",
-            "deliveryCharge": 59,
-            "slotsEnabled": False
-        }
-        resp = requests.put(f"{API_BASE}/settings", json=update_payload, timeout=10)
-        if resp.status_code != 200:
-            print_test("Settings - Update", False, f"Status {resp.status_code}")
-            all_passed = False
-        else:
-            data = resp.json()
-            settings = data.get('settings', {})
-            
-            # Verify changes
-            if settings.get('shopName') != "ChemistShop Premium" or settings.get('deliveryCharge') != 59 or settings.get('slotsEnabled') != False:
-                print_test("Settings - Update", False, "Changes not applied")
-                all_passed = False
-            else:
-                print_test("Settings - Update", True, "shopName, deliveryCharge, slotsEnabled updated")
+        }, timeout=10)
         
-        # Verify persistence
-        resp = requests.get(f"{API_BASE}/settings", timeout=10)
         if resp.status_code == 200:
             data = resp.json()
-            settings = data.get('settings', {})
-            if settings.get('shopName') == "ChemistShop Premium" and settings.get('deliveryCharge') == 59:
-                print_test("Settings - Update Persistence", True, "Changes persisted")
+            if data.get("created") == 2 and data.get("failed") == 0:
+                log_result("bulk_import", "POST /api/products/bulk (2 products)", True, f"Created: {data['created']}, Failed: {data['failed']}")
             else:
-                print_test("Settings - Update Persistence", False, "Changes not persisted")
-                all_passed = False
-    except Exception as e:
-        print_test("Settings - Update", False, f"Exception: {str(e)}")
-        all_passed = False
-    
-    # Restore slotsEnabled for downstream tests
-    try:
-        restore_payload = {"slotsEnabled": True}
-        resp = requests.put(f"{API_BASE}/settings", json=restore_payload, timeout=10)
-        if resp.status_code == 200:
-            print_test("Settings - Restore slotsEnabled", True, "Restored slotsEnabled=true")
+                log_result("bulk_import", "POST /api/products/bulk (2 products)", False, f"Expected created:2, failed:0, got {data}")
         else:
-            print_test("Settings - Restore slotsEnabled", False, f"Status {resp.status_code}")
-            all_passed = False
+            log_result("bulk_import", "POST /api/products/bulk (2 products)", False, f"Status {resp.status_code}: {resp.text}")
     except Exception as e:
-        print_test("Settings - Restore", False, f"Exception: {str(e)}")
-        all_passed = False
+        log_result("bulk_import", "POST /api/products/bulk (2 products)", False, str(e))
     
-    return all_passed
+    # 2.2: GET /api/products?search=CSV - Verify both products exist
+    try:
+        resp = requests.get(f"{BASE_URL}/products?search=CSV", timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            products = data.get("products", [])
+            if len(products) >= 2:
+                csv_products = [p for p in products if "CSV Test" in p.get("name", "")]
+                if len(csv_products) >= 2:
+                    ids_valid = all(p.get("id", "").startswith("p-") for p in csv_products)
+                    if ids_valid:
+                        log_result("bulk_import", "GET /api/products?search=CSV (verify)", True, f"Found {len(csv_products)} CSV products with p- IDs")
+                    else:
+                        log_result("bulk_import", "GET /api/products?search=CSV (verify)", False, "Some products don't have p- prefix")
+                else:
+                    log_result("bulk_import", "GET /api/products?search=CSV (verify)", False, f"Found only {len(csv_products)} CSV products")
+            else:
+                log_result("bulk_import", "GET /api/products?search=CSV (verify)", False, f"Expected at least 2 products, got {len(products)}")
+        else:
+            log_result("bulk_import", "GET /api/products?search=CSV (verify)", False, f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("bulk_import", "GET /api/products?search=CSV (verify)", False, str(e))
 
-def main():
-    print("\n" + "=" * 80)
-    print("BACKEND API TEST SUITE - NEW ADMIN PANEL ENDPOINTS")
-    print("=" * 80)
-    print(f"Base URL: {BASE_URL}")
-    print(f"API Base: {API_BASE}")
-    print("=" * 80 + "\n")
+def test_customer_analytics():
+    """Test 3: Customer Analytics"""
+    print("\n=== Testing CUSTOMER ANALYTICS Endpoints ===")
     
-    results = {}
+    # 3.1: GET /api/admin/customers
+    try:
+        resp = requests.get(f"{BASE_URL}/admin/customers", timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            customers = data.get("customers", [])
+            summary = data.get("summary", {})
+            
+            # Check customers array structure
+            if customers and len(customers) > 0:
+                sample = customers[0]
+                required_keys = ["phone", "name", "orderCount", "totalSpent", "avgOrderValue", 
+                               "firstOrderDate", "lastOrderDate", "daysSinceLast", "segment"]
+                missing_keys = [k for k in required_keys if k not in sample]
+                
+                if not missing_keys:
+                    log_result("customer_analytics", "GET /api/admin/customers (customers structure)", True, 
+                             f"All required keys present in {len(customers)} customers")
+                else:
+                    log_result("customer_analytics", "GET /api/admin/customers (customers structure)", False, 
+                             f"Missing keys: {missing_keys}")
+            else:
+                log_result("customer_analytics", "GET /api/admin/customers (customers structure)", False, 
+                         "No customers found")
+            
+            # Check summary structure
+            summary_keys = ["total", "segments", "totalLTV", "avgLTV", "retentionRate", "avgOrderCount"]
+            missing_summary = [k for k in summary_keys if k not in summary]
+            
+            if not missing_summary:
+                segments = summary.get("segments", {})
+                segment_keys = ["New", "Returning", "Loyal", "VIP"]
+                missing_segments = [k for k in segment_keys if k not in segments]
+                
+                if not missing_segments:
+                    log_result("customer_analytics", "GET /api/admin/customers (summary structure)", True, 
+                             f"Summary complete: total={summary['total']}, segments={segments}")
+                else:
+                    log_result("customer_analytics", "GET /api/admin/customers (summary structure)", False, 
+                             f"Missing segment keys: {missing_segments}")
+            else:
+                log_result("customer_analytics", "GET /api/admin/customers (summary structure)", False, 
+                         f"Missing summary keys: {missing_summary}")
+        else:
+            log_result("customer_analytics", "GET /api/admin/customers", False, 
+                     f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("customer_analytics", "GET /api/admin/customers", False, str(e))
+
+def test_inventory():
+    """Test 4: Inventory Logs and Restock"""
+    print("\n=== Testing INVENTORY Endpoints ===")
     
-    # Run all tests
-    results['Admin Stats'] = test_admin_stats()
-    results['Admin Revenue'] = test_admin_revenue()
-    results['Admin Orders'] = test_admin_orders()
-    results['Products CRUD'] = test_products_crud()
-    results['Order Status Update'] = test_order_status_update()
-    results['Slots CRUD'] = test_slots_crud()
-    results['Settings'] = test_settings()
+    product_id = None
     
-    # Summary
-    print("\n" + "=" * 80)
-    print("TEST SUMMARY")
-    print("=" * 80)
+    # 4.1: GET /api/inventory/logs
+    try:
+        resp = requests.get(f"{BASE_URL}/inventory/logs", timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if "logs" in data:
+                log_result("inventory", "GET /api/inventory/logs", True, f"Retrieved {len(data['logs'])} logs")
+            else:
+                log_result("inventory", "GET /api/inventory/logs", False, "Missing 'logs' key in response")
+        else:
+            log_result("inventory", "GET /api/inventory/logs", False, f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("inventory", "GET /api/inventory/logs", False, str(e))
     
-    for test_name, passed in results.items():
-        status = "✅ PASS" if passed else "❌ FAIL"
-        print(f"{status}: {test_name}")
+    # Get first product ID
+    try:
+        resp = requests.get(f"{BASE_URL}/products?limit=1", timeout=10)
+        if resp.status_code == 200:
+            products = resp.json().get("products", [])
+            if products:
+                product_id = products[0].get("id")
+                print(f"  → Using product ID: {product_id}")
+    except Exception as e:
+        print(f"  → Failed to get product ID: {e}")
     
-    total = len(results)
-    passed = sum(1 for v in results.values() if v)
-    print(f"\nTotal: {passed}/{total} test sections passed")
-    print("=" * 80 + "\n")
+    if not product_id:
+        log_result("inventory", "POST /api/inventory/restock (qty:25)", False, "No product ID available")
+        log_result("inventory", "POST /api/inventory/restock (qty:-5)", False, "No product ID available")
+        log_result("inventory", "GET /api/inventory/logs?productId=X", False, "No product ID available")
+        return
     
-    return all(results.values())
+    # 4.2: POST /api/inventory/restock with qty:25
+    try:
+        resp = requests.post(f"{BASE_URL}/inventory/restock", json={
+            "productId": product_id,
+            "qty": 25,
+            "reason": "Test restock"
+        }, timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("ok") and data.get("log"):
+                log_entry = data["log"]
+                if (log_entry.get("type") == "restock" and 
+                    log_entry.get("qtyChange") == 25 and
+                    log_entry.get("after") == log_entry.get("before", 0) + 25):
+                    log_result("inventory", "POST /api/inventory/restock (qty:25)", True, 
+                             f"Restock successful: before={log_entry['before']}, after={log_entry['after']}")
+                else:
+                    log_result("inventory", "POST /api/inventory/restock (qty:25)", False, 
+                             f"Invalid log entry: {log_entry}")
+            else:
+                log_result("inventory", "POST /api/inventory/restock (qty:25)", False, f"Response: {data}")
+        else:
+            log_result("inventory", "POST /api/inventory/restock (qty:25)", False, 
+                     f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("inventory", "POST /api/inventory/restock (qty:25)", False, str(e))
+    
+    # 4.3: POST /api/inventory/restock with qty:-5
+    try:
+        resp = requests.post(f"{BASE_URL}/inventory/restock", json={
+            "productId": product_id,
+            "qty": -5,
+            "reason": "Test adjustment"
+        }, timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("ok") and data.get("log"):
+                log_entry = data["log"]
+                if log_entry.get("type") == "adjustment" and log_entry.get("qtyChange") == -5:
+                    log_result("inventory", "POST /api/inventory/restock (qty:-5)", True, 
+                             f"Adjustment successful: type={log_entry['type']}, qtyChange={log_entry['qtyChange']}")
+                else:
+                    log_result("inventory", "POST /api/inventory/restock (qty:-5)", False, 
+                             f"Expected type='adjustment', qtyChange=-5, got {log_entry}")
+            else:
+                log_result("inventory", "POST /api/inventory/restock (qty:-5)", False, f"Response: {data}")
+        else:
+            log_result("inventory", "POST /api/inventory/restock (qty:-5)", False, 
+                     f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("inventory", "POST /api/inventory/restock (qty:-5)", False, str(e))
+    
+    # 4.4: GET /api/inventory/logs?productId=X
+    try:
+        resp = requests.get(f"{BASE_URL}/inventory/logs?productId={product_id}", timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            logs = data.get("logs", [])
+            # Look for our test entries
+            restock_entry = next((l for l in logs if l.get("type") == "restock" and l.get("reason") == "Test restock"), None)
+            adjustment_entry = next((l for l in logs if l.get("type") == "adjustment" and l.get("reason") == "Test adjustment"), None)
+            
+            if restock_entry and adjustment_entry:
+                log_result("inventory", "GET /api/inventory/logs?productId=X (filtered)", True, 
+                         f"Found both test entries in {len(logs)} logs")
+            else:
+                log_result("inventory", "GET /api/inventory/logs?productId=X (filtered)", False, 
+                         f"Missing entries: restock={bool(restock_entry)}, adjustment={bool(adjustment_entry)}")
+        else:
+            log_result("inventory", "GET /api/inventory/logs?productId=X (filtered)", False, 
+                     f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("inventory", "GET /api/inventory/logs?productId=X (filtered)", False, str(e))
+
+def test_prescription_chat():
+    """Test 5: Prescription Chat"""
+    print("\n=== Testing PRESCRIPTION CHAT Endpoints ===")
+    
+    rx_id = None
+    
+    # 5.1: POST /api/prescriptions - Create prescription
+    try:
+        resp = requests.post(f"{BASE_URL}/prescriptions", json={
+            "userId": "u-rx-test",
+            "patientName": "Test Patient",
+            "phone": "9999999999",
+            "notes": "Need urgent",
+            "fileName": "rx.png",
+            "fileDataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+        }, timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            prescription = data.get("prescription", {})
+            rx_id = prescription.get("id")
+            if rx_id and rx_id.startswith("RX-"):
+                log_result("prescription_chat", "POST /api/prescriptions (create)", True, f"Created RX: {rx_id}")
+            else:
+                log_result("prescription_chat", "POST /api/prescriptions (create)", False, f"Invalid ID: {rx_id}")
+        else:
+            log_result("prescription_chat", "POST /api/prescriptions (create)", False, 
+                     f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("prescription_chat", "POST /api/prescriptions (create)", False, str(e))
+    
+    if not rx_id:
+        log_result("prescription_chat", "GET /api/prescriptions/:id", False, "No RX ID available")
+        log_result("prescription_chat", "POST /api/prescriptions/:id/messages (admin)", False, "No RX ID available")
+        log_result("prescription_chat", "POST /api/prescriptions/:id/messages (customer)", False, "No RX ID available")
+        log_result("prescription_chat", "GET /api/prescriptions/:id/messages", False, "No RX ID available")
+        log_result("prescription_chat", "PATCH /api/prescriptions/:id", False, "No RX ID available")
+        log_result("prescription_chat", "GET /api/admin/prescriptions?status=Confirmed", False, "No RX ID available")
+        log_result("prescription_chat", "GET /api/admin/prescriptions?search=9999999", False, "No RX ID available")
+        return
+    
+    # 5.2: GET /api/prescriptions/:id
+    try:
+        resp = requests.get(f"{BASE_URL}/prescriptions/{rx_id}", timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            prescription = data.get("prescription", {})
+            if prescription.get("id") == rx_id:
+                log_result("prescription_chat", "GET /api/prescriptions/:id", True, f"Retrieved RX: {rx_id}")
+            else:
+                log_result("prescription_chat", "GET /api/prescriptions/:id", False, f"ID mismatch: {prescription}")
+        else:
+            log_result("prescription_chat", "GET /api/prescriptions/:id", False, 
+                     f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("prescription_chat", "GET /api/prescriptions/:id", False, str(e))
+    
+    # 5.3: POST /api/prescriptions/:id/messages (admin)
+    try:
+        resp = requests.post(f"{BASE_URL}/prescriptions/{rx_id}/messages", json={
+            "sender": "admin",
+            "authorName": "Pharmacist",
+            "text": "Hello, confirming dosage"
+        }, timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            message = data.get("message", {})
+            if message.get("id") and message.get("sender") == "admin":
+                log_result("prescription_chat", "POST /api/prescriptions/:id/messages (admin)", True, 
+                         f"Message created: {message['id']}")
+            else:
+                log_result("prescription_chat", "POST /api/prescriptions/:id/messages (admin)", False, 
+                         f"Invalid message: {message}")
+        else:
+            log_result("prescription_chat", "POST /api/prescriptions/:id/messages (admin)", False, 
+                     f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("prescription_chat", "POST /api/prescriptions/:id/messages (admin)", False, str(e))
+    
+    # 5.4: POST /api/prescriptions/:id/messages (customer)
+    try:
+        resp = requests.post(f"{BASE_URL}/prescriptions/{rx_id}/messages", json={
+            "sender": "customer",
+            "text": "Thanks!"
+        }, timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            message = data.get("message", {})
+            if message.get("id") and message.get("sender") == "customer":
+                log_result("prescription_chat", "POST /api/prescriptions/:id/messages (customer)", True, 
+                         f"Message created: {message['id']}")
+            else:
+                log_result("prescription_chat", "POST /api/prescriptions/:id/messages (customer)", False, 
+                         f"Invalid message: {message}")
+        else:
+            log_result("prescription_chat", "POST /api/prescriptions/:id/messages (customer)", False, 
+                     f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("prescription_chat", "POST /api/prescriptions/:id/messages (customer)", False, str(e))
+    
+    # 5.5: GET /api/prescriptions/:id/messages
+    try:
+        resp = requests.get(f"{BASE_URL}/prescriptions/{rx_id}/messages", timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            messages = data.get("messages", [])
+            if len(messages) >= 2:
+                # Check if sorted by createdAt ascending
+                timestamps = [m.get("createdAt") for m in messages]
+                is_sorted = all(timestamps[i] <= timestamps[i+1] for i in range(len(timestamps)-1))
+                if is_sorted:
+                    log_result("prescription_chat", "GET /api/prescriptions/:id/messages", True, 
+                             f"Retrieved {len(messages)} messages, sorted ascending")
+                else:
+                    log_result("prescription_chat", "GET /api/prescriptions/:id/messages", False, 
+                             "Messages not sorted by createdAt ascending")
+            else:
+                log_result("prescription_chat", "GET /api/prescriptions/:id/messages", False, 
+                         f"Expected at least 2 messages, got {len(messages)}")
+        else:
+            log_result("prescription_chat", "GET /api/prescriptions/:id/messages", False, 
+                     f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("prescription_chat", "GET /api/prescriptions/:id/messages", False, str(e))
+    
+    # 5.6: PATCH /api/prescriptions/:id (update status)
+    try:
+        resp = requests.patch(f"{BASE_URL}/prescriptions/{rx_id}", json={
+            "status": "Confirmed"
+        }, timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            prescription = data.get("prescription", {})
+            if prescription.get("status") == "Confirmed":
+                log_result("prescription_chat", "PATCH /api/prescriptions/:id (status=Confirmed)", True, 
+                         f"Status updated to Confirmed")
+            else:
+                log_result("prescription_chat", "PATCH /api/prescriptions/:id (status=Confirmed)", False, 
+                         f"Status not updated: {prescription.get('status')}")
+        else:
+            log_result("prescription_chat", "PATCH /api/prescriptions/:id (status=Confirmed)", False, 
+                     f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("prescription_chat", "PATCH /api/prescriptions/:id (status=Confirmed)", False, str(e))
+    
+    # 5.7: GET /api/admin/prescriptions?status=Confirmed
+    try:
+        resp = requests.get(f"{BASE_URL}/admin/prescriptions?status=Confirmed", timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            prescriptions = data.get("prescriptions", [])
+            found = any(p.get("id") == rx_id for p in prescriptions)
+            if found:
+                log_result("prescription_chat", "GET /api/admin/prescriptions?status=Confirmed", True, 
+                         f"Found RX {rx_id} in Confirmed list")
+            else:
+                log_result("prescription_chat", "GET /api/admin/prescriptions?status=Confirmed", False, 
+                         f"RX {rx_id} not found in Confirmed list")
+        else:
+            log_result("prescription_chat", "GET /api/admin/prescriptions?status=Confirmed", False, 
+                     f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("prescription_chat", "GET /api/admin/prescriptions?status=Confirmed", False, str(e))
+    
+    # 5.8: GET /api/admin/prescriptions?search=9999999
+    try:
+        resp = requests.get(f"{BASE_URL}/admin/prescriptions?search=9999999", timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            prescriptions = data.get("prescriptions", [])
+            found = any(p.get("id") == rx_id for p in prescriptions)
+            if found:
+                log_result("prescription_chat", "GET /api/admin/prescriptions?search=9999999", True, 
+                         f"Found RX {rx_id} by phone search")
+            else:
+                log_result("prescription_chat", "GET /api/admin/prescriptions?search=9999999", False, 
+                         f"RX {rx_id} not found by phone search")
+        else:
+            log_result("prescription_chat", "GET /api/admin/prescriptions?search=9999999", False, 
+                     f"Status {resp.status_code}: {resp.text}")
+    except Exception as e:
+        log_result("prescription_chat", "GET /api/admin/prescriptions?search=9999999", False, str(e))
+
+def print_summary():
+    """Print final test summary"""
+    print("\n" + "="*60)
+    print("FINAL TEST SUMMARY")
+    print("="*60)
+    
+    total_passed = 0
+    total_failed = 0
+    
+    for group, results in test_results.items():
+        passed = results["passed"]
+        failed = results["failed"]
+        total = passed + failed
+        status = "✅ PASS" if failed == 0 else "❌ FAIL"
+        
+        print(f"\n{status} {group.upper().replace('_', ' ')}: {passed}/{total} passed")
+        total_passed += passed
+        total_failed += failed
+    
+    print("\n" + "="*60)
+    grand_total = total_passed + total_failed
+    overall_status = "✅ ALL TESTS PASSED" if total_failed == 0 else f"❌ {total_failed} TESTS FAILED"
+    print(f"{overall_status}: {total_passed}/{grand_total} passed")
+    print("="*60)
+    
+    return total_failed == 0
 
 if __name__ == "__main__":
-    success = main()
-    exit(0 if success else 1)
+    print("ChemistShop Admin v3 Backend Test Suite")
+    print(f"Base URL: {BASE_URL}")
+    print(f"Admin: {ADMIN_EMAIL}")
+    
+    try:
+        test_auth()
+        test_bulk_import()
+        test_customer_analytics()
+        test_inventory()
+        test_prescription_chat()
+        
+        success = print_summary()
+        sys.exit(0 if success else 1)
+    except KeyboardInterrupt:
+        print("\n\nTest interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n\nFATAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
