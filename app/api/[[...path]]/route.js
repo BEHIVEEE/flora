@@ -199,7 +199,8 @@ function parseCSVRow(line) {
 export async function OPTIONS() { return new NextResponse(null, { status: 204, headers: CORS }); }
 
 export async function GET(req, { params }) {
-  const path = (params?.path || []).join('/');
+  const p = await params;
+  const path = (p?.path || []).join('/');
   const { searchParams } = new URL(req.url);
   try {
     const db = await getDb();
@@ -545,7 +546,8 @@ export async function GET(req, { params }) {
 }
 
 export async function POST(req, { params }) {
-  const path = (params?.path || []).join('/');
+  const p = await params;
+  const path = (p?.path || []).join('/');
   try {
     const db = await getDb();
     await seedOnce();
@@ -855,7 +857,8 @@ export async function POST(req, { params }) {
 }
 
 export async function PUT(req, { params }) {
-  const path = (params?.path || []).join('/');
+  const p = await params;
+  const path = (p?.path || []).join('/');
   try {
     const db = await getDb();
     const body = await req.json().catch(() => ({}));
@@ -1025,7 +1028,8 @@ export async function PUT(req, { params }) {
 }
 
 export async function PATCH(req, { params }) {
-  const path = (params?.path || []).join('/');
+  const p = await params;
+  const path = (p?.path || []).join('/');
   try {
     const db = await getDb();
     const body = await req.json().catch(() => ({}));
@@ -1064,7 +1068,8 @@ export async function PATCH(req, { params }) {
 }
 
 export async function DELETE(req, { params }) {
-  const path = (params?.path || []).join('/');
+  const p = await params;
+  const path = (p?.path || []).join('/');
   try {
     const db = await getDb();
     if (path.startsWith('addresses/')) { await db.collection('addresses').deleteOne({ id: path.replace('addresses/', '') }); return json({ ok: true }); }
