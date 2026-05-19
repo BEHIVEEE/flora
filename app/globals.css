@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background-color: #ffffff;
+    color: #0f172a;
+    font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+@media (prefers-color-scheme: dark) {
+  html, body { background-color: #ffffff !important; color: #0f172a !important; }
+}
+
+@layer base {
+  :root {
+        --background: 0 0% 100%;
+        --foreground: 215 28% 12%;
+        --card: 0 0% 100%;
+        --card-foreground: 215 28% 12%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 215 28% 12%;
+        --primary: 174 80% 26%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 173 60% 96%;
+        --secondary-foreground: 174 80% 22%;
+        --muted: 210 40% 96.5%;
+        --muted-foreground: 215.4 16.3% 46.9%;
+        --accent: 173 60% 96%;
+        --accent-foreground: 174 80% 22%;
+        --destructive: 0 84.2% 60.2%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 214.3 31.8% 91.4%;
+        --input: 214.3 31.8% 91.4%;
+        --ring: 174 80% 26%;
+        --radius: 0.85rem;
+    }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground; }
+}
+
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .text-balance { text-wrap: balance; }
+  .gradient-teal { background: linear-gradient(135deg, #0d9488 0%, #14b8a6 50%, #5eead4 100%); }
+  .gradient-teal-soft { background: linear-gradient(135deg, #ecfeff 0%, #f0fdfa 50%, #ffffff 100%); }
+  .shadow-soft { box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 20px -4px rgba(15,23,42,.06); }
+  .shadow-lift { box-shadow: 0 8px 30px -10px rgba(13,148,136,.18), 0 2px 8px rgba(15,23,42,.04); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -800px 0; }
+  100% { background-position: 800px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 0%, #e2e8f0 40%, #f1f5f9 80%);
+  background-size: 800px 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.animate-marquee { animation: marquee 30s linear infinite; }
