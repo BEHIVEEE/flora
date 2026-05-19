@@ -5,6 +5,7 @@ import { CATEGORY_SEED } from '@/lib/categories';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { z } from 'zod';
+import { hashPassword, signToken, verifyToken, getBearer } from '@/lib/auth';
 
 // In-memory rate limiter (per IP)
 const rateMap = new Map();
@@ -36,25 +37,6 @@ function sanitizeImages(images) {
 
 const SECRET = process.env.AUTH_SECRET;
 if (!SECRET) throw new Error('AUTH_SECRET environment variable is required');
-const hashPassword = (pwd, salt) => crypto.pbkdf2Sync(pwd, salt, 100000, 64, 'sha512').toString('hex');
-const signToken = (payload) => {
-  const body = Buffer.from(JSON.stringify({ ...payload, iat: Date.now() })).toString('base64url');
-  const sig = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
-  return `${body}.${sig}`;
-};
-const verifyToken = (token) => {
-  if (!token) return null;
-  const [body, sig] = (token || '').split('.');
-  if (!body || !sig) return null;
-  const exp = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
-  if (exp !== sig) return null;
-  try {
-    const d = JSON.parse(Buffer.from(body, 'base64url').toString());
-    if (Date.now() - d.iat > 7 * 86400000) return null;
-    return d;
-  } catch { return null; }
-};
-const getBearer = (req) => (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
 
 let seeded = false;
 async function seedOnce() {

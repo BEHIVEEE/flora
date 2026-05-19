@@ -22,7 +22,7 @@ async function verifyToken(token) {
   } catch { return null; }
 }
 
-export async function middleware(request) {
+export async function proxy(request) {
   const { pathname } = request.nextUrl;
 
   // Only protect admin routes (except admin/login)

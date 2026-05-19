@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { uploadToCloudinary, validateImage } from '@/lib/cloudinary';
-import { requireAdmin, getBearer, verifyToken } from '../[[...path]]/route';
+import { getBearer, verifyToken } from '@/lib/auth';
 import { getDb } from '@/lib/mongo';
 
 const CORS = {

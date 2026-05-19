@@ -1,13 +1,13 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, ShieldCheck, Truck, Stethoscope, Pill, HeartPulse, Bandage, Baby, Leaf, Sparkles, Activity, Star, Clock, Award, MessageCircle, Upload, Scissors, Bone, Wheelchair, Clipboard, Sun, Cat, BriefcaseMedical } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Truck, Stethoscope, Pill, HeartPulse, Bandage, Baby, Leaf, Sparkles, Activity, Star, Clock, Award, MessageCircle, Upload, Scissors, Bone, Wheat, Clipboard, Sun, Cat, BriefcaseMedical } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
 import ProductSkeleton from '@/components/ProductSkeleton';
 import { Button } from '@/components/ui/button';
 import { useSettings } from '@/components/SettingsProvider';
 
-const ICONS = { Pill, Stethoscope, HeartPulse, Bandage, Baby, Leaf, Sparkles, Activity, Scissors, Bone, Wheelchair, Clipboard, Sun, Cat, BriefcaseMedical };
+const ICONS = { Pill, Stethoscope, HeartPulse, Bandage, Baby, Leaf, Sparkles, Activity, Scissors, Bone, Wheat, Clipboard, Sun, Cat, BriefcaseMedical };
 const CAT_COLORS = [
   'from-teal-500 to-emerald-500',
   'from-blue-500 to-cyan-500',
