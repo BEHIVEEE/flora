@@ -35,9 +35,6 @@ function sanitizeImages(images) {
   return images.filter(url => typeof url === 'string' && url.startsWith('http') && !url.startsWith('data:'));
 }
 
-const SECRET = process.env.AUTH_SECRET;
-if (!SECRET) throw new Error('AUTH_SECRET environment variable is required');
-
 let seeded = false;
 async function seedOnce() {
   if (seeded) return;
