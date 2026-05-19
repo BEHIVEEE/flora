@@ -25,7 +25,10 @@ const Orders = () => {
     const params = new URLSearchParams();
     if (status !== 'all') params.set('status', status);
     if (search) params.set('search', search);
-    fetch(`/api/admin/orders?${params.toString()}`).then(r => r.json()).then(d => setOrders(d.orders || []));
+    const token = localStorage.getItem('cs_token');
+    fetch(`/api/admin/orders?${params.toString()}`, {
+      headers: token ? { Authorization: 'Bearer ' + token } : {},
+    }).then(r => r.json()).then(d => setOrders(d.orders || []));
   };
   useEffect(() => { load(); }, [status]);
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [search]);

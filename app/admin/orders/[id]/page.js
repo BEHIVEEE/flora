@@ -24,10 +24,15 @@ const OrderDetail = () => {
   const [selectedRider, setSelectedRider] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const load = () => fetch(`/api/orders/${id}`).then(r => r.json()).then(d => {
-    setOrder(d.order);
-    if (d.order?.riderId) setSelectedRider(d.order.riderId);
-  });
+  const load = () => {
+    const token = localStorage.getItem('cs_token');
+    fetch(`/api/orders/${id}`, {
+      headers: token ? { Authorization: 'Bearer ' + token } : {},
+    }).then(r => r.json()).then(d => {
+      setOrder(d.order);
+      if (d.order?.riderId) setSelectedRider(d.order.riderId);
+    });
+  };
   useEffect(() => {
     load();
     fetch('/api/slots').then(r => r.json()).then(d => setSlots(d.slots || []));
@@ -36,7 +41,12 @@ const OrderDetail = () => {
 
   const setStatus = async (status) => {
     setSaving(true);
-    await fetch(`/api/orders/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+    const token = localStorage.getItem('cs_token');
+    await fetch(`/api/orders/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+      body: JSON.stringify({ status }),
+    });
     toast.success(`Status updated to ${status}`);
     setSaving(false);
     load();

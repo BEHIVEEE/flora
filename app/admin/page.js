@@ -17,7 +17,10 @@ const statusColors = {
 const Dashboard = () => {
   const [stats, setStats] = useState(null);
   useEffect(() => {
-    fetch('/api/admin/stats').then(r => r.json()).then(d => {
+    const token = localStorage.getItem('cs_token');
+    fetch('/api/admin/stats', {
+      headers: token ? { Authorization: 'Bearer ' + token } : {},
+    }).then(r => r.json()).then(d => {
       // Provide safe defaults for any missing fields
       setStats({
         todayRevenue: 0, todayOrders: 0, pendingCount: 0,

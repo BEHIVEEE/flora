@@ -22,7 +22,10 @@ const Prescriptions = () => {
     const params = new URLSearchParams();
     if (status !== 'all') params.set('status', status);
     if (q) params.set('search', q);
-    fetch(`/api/admin/prescriptions?${params.toString()}`).then(r => r.json()).then(d => setList(d.prescriptions || []));
+    const token = localStorage.getItem('cs_token');
+    fetch(`/api/admin/prescriptions?${params.toString()}`, {
+      headers: token ? { Authorization: 'Bearer ' + token } : {},
+    }).then(r => r.json()).then(d => setList(d.prescriptions || []));
   };
   useEffect(() => { load(); }, [status]);
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [q]);
