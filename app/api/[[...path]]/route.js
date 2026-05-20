@@ -102,15 +102,23 @@ async function ensureIndexes(db) {
   try {
     await db.collection('users').createIndex({ email: 1 }, { unique: true });
     await db.collection('users').createIndex({ id: 1 }, { unique: true });
+    // Products: scaled for 100k+ catalog
     await db.collection('products').createIndex({ id: 1 }, { unique: true });
-    await db.collection('products').createIndex({ category: 1 });
-    await db.collection('products').createIndex({ name: 'text' });
+    await db.collection('products').createIndex({ category: 1, ratingCount: -1 });
+    await db.collection('products').createIndex({ categoryId: 1, ratingCount: -1 });
+    await db.collection('products').createIndex({ subcategoryId: 1 });
+    await db.collection('products').createIndex({ brand: 1 });
+    await db.collection('products').createIndex({ price: 1 });
+    await db.collection('products').createIndex({ rating: -1 });
+    await db.collection('products').createIndex({ createdAt: -1 });
+    await db.collection('products').createIndex({ name: 'text', brand: 'text', description: 'text' }, { weights: { name: 10, brand: 5, description: 1 }, name: 'product_search_text' });
     await db.collection('orders').createIndex({ id: 1 }, { unique: true });
     await db.collection('orders').createIndex({ userId: 1 });
     await db.collection('orders').createIndex({ createdAt: -1 });
     await db.collection('orders').createIndex({ status: 1 });
     await db.collection('orders').createIndex({ slotDate: 1 });
     await db.collection('orders').createIndex({ 'address.phone': 1 });
+    await db.collection('orders').createIndex({ riderId: 1, status: 1 });
     await db.collection('slots').createIndex({ id: 1 }, { unique: true });
     await db.collection('settings').createIndex({ id: 1 }, { unique: true });
     await db.collection('prescriptions').createIndex({ userId: 1 });
@@ -119,8 +127,9 @@ async function ensureIndexes(db) {
     await db.collection('categories').createIndex({ slug: 1 }, { unique: true });
     await db.collection('categories').createIndex({ parentCategoryId: 1 });
     await db.collection('categories').createIndex({ type: 1 });
-    await db.collection('products').createIndex({ categoryId: 1 });
-    await db.collection('products').createIndex({ subcategoryId: 1 });
+    await db.collection('chat_threads').createIndex({ userId: 1 });
+    await db.collection('chat_threads').createIndex({ lastMessageAt: -1 });
+    await db.collection('chat_messages').createIndex({ threadId: 1, createdAt: 1 });
   } catch (e) { console.error('Index creation error', e); }
 }
 
@@ -295,15 +304,29 @@ export async function GET(req, { params }) {
       if (subcategoryId) filter.subcategoryId = subcategoryId;
       if (brandId) filter.brandId = brandId;
       if (brand) filter.brand = brand;
-      if (search) filter.name = { $regex: search, $options: 'i' };
+      // Search: use text index for >=3 chars (fast at 100k+); fall back to prefix regex for short queries
+      let projection = { _id: 0 };
       let sortObj = { ratingCount: -1 };
+      if (search) {
+        const s = search.trim();
+        if (s.length >= 3) {
+          filter.$text = { $search: s };
+          projection = { _id: 0, _score: { $meta: 'textScore' } };
+          sortObj = { _score: { $meta: 'textScore' } };
+        } else {
+          filter.name = { $regex: '^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+        }
+      }
       if (sort === 'price_asc') sortObj = { price: 1 };
       if (sort === 'price_desc') sortObj = { price: -1 };
       if (sort === 'rating') sortObj = { rating: -1 };
       if (sort === 'discount') sortObj = { mrp: -1 };
       if (sort === 'newest') sortObj = { createdAt: -1 };
-      const total = await db.collection('products').countDocuments(filter);
-      const products = await db.collection('products').find(filter, { projection: { _id: 0 } }).sort(sortObj).skip(offset).limit(limit).toArray();
+      // Skip count on paginated requests after first page (saves a full scan at scale)
+      const total = offset === 0
+        ? await db.collection('products').countDocuments(filter, { limit: 10000 })
+        : -1;
+      const products = await db.collection('products').find(filter, { projection }).sort(sortObj).skip(offset).limit(limit).toArray();
       return json({ products, total }, 200, true);
     }
     if (path.startsWith('products/')) {
