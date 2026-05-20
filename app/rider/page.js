@@ -17,17 +17,37 @@ const RiderDashboard = () => {
   const router = useRouter();
   const [rider, setRider] = useState(null);
   const [orders, setOrders] = useState([]);
+  const [available, setAvailable] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('active');
+  const [claiming, setClaiming] = useState(null);
+  const [tab, setTab] = useState('available');
 
   const load = async () => {
     const token = localStorage.getItem('cs_token');
     if (!token) { router.push('/rider/login'); return; }
-    const res = await fetch('/api/rider/orders', { headers: { Authorization: 'Bearer ' + token } });
-    if (res.status === 401 || res.status === 403) { router.push('/rider/login'); return; }
-    const d = await res.json();
-    setOrders(d.orders || []);
+    const headers = { Authorization: 'Bearer ' + token };
+    const [r1, r2] = await Promise.all([
+      fetch('/api/rider/orders', { headers }),
+      fetch('/api/rider/available', { headers }),
+    ]);
+    if (r1.status === 401 || r1.status === 403) { router.push('/rider/login'); return; }
+    const d1 = await r1.json();
+    const d2 = await r2.json();
+    setOrders(d1.orders || []);
+    setAvailable(d2.orders || []);
     setLoading(false);
+  };
+
+  const claim = async (orderId) => {
+    const token = localStorage.getItem('cs_token');
+    setClaiming(orderId);
+    try {
+      const res = await fetch(`/api/orders/${orderId}/claim`, { method: 'PUT', headers: { Authorization: 'Bearer ' + token } });
+      const d = await res.json();
+      if (d.ok) { toast.success('Order claimed!'); setTab('active'); await load(); }
+      else toast.error(d.error || 'Failed to claim');
+    } catch { toast.error('Network error'); }
+    finally { setClaiming(null); }
   };
 
   useEffect(() => {
