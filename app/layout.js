@@ -22,6 +22,12 @@ export const viewport = { themeColor: '#0d9488', width: 'device-width', initialS
 const App = ({ children }) => {
   return (
     <html lang="en" className={inter.variable} style={{ colorScheme: 'light' }} suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="" />
+        <link rel="preconnect" href="https://images.unsplash.com" crossOrigin="" />
+        <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+        <link rel="dns-prefetch" href="https://images.unsplash.com" />
+      </head>
       <body className="min-h-screen bg-white text-slate-900 font-sans antialiased pb-20 md:pb-0" suppressHydrationWarning>
         <SettingsProvider>
           <AuthProvider>
