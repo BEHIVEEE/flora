@@ -28,7 +28,11 @@ const CORS = {
   'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
-const json = (data, status = 200) => NextResponse.json(data, { status, headers: CORS });
+const CACHE = { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120' };
+const json = (data, status = 200, cache = false) => {
+  const headers = cache ? { ...CORS, ...CACHE } : CORS;
+  return NextResponse.json(data, { status, headers });
+};
 
 function sanitizeImages(images) {
   if (!Array.isArray(images)) return [];
@@ -122,17 +126,14 @@ async function ensureIndexes(db) {
 
 async function ensureSeed(db) {
   await ensureIndexes(db);
-  if (await db.collection('products').countDocuments() === 0) {
+  const hasProducts = await db.collection('products').countDocuments({}, { limit: 1 });
+  if (hasProducts === 0) {
     await db.collection('products').insertMany(PRODUCTS.map(p => ({ ...p, images: [p.image] })));
-  }
-  if (await db.collection('settings').countDocuments() === 0) await db.collection('settings').insertOne({ ...DEFAULT_SETTINGS });
-  if (await db.collection('slots').countDocuments() === 0) await db.collection('slots').insertMany(DEFAULT_SLOTS.map(s => ({ ...s })));
-  if (await db.collection('categories').countDocuments() === 0) {
+    await db.collection('settings').insertOne({ ...DEFAULT_SETTINGS });
+    await db.collection('slots').insertMany(DEFAULT_SLOTS.map(s => ({ ...s })));
     await db.collection('categories').insertMany(CATEGORY_SEED.map(c => ({ ...c, createdAt: new Date().toISOString() })));
-  }
-  await ensureAdminUser(db);
+    await ensureAdminUser(db);
 
-  if (await db.collection('orders').countDocuments() === 0) {
     const products = await db.collection('products').find({}, { projection: { _id: 0 } }).limit(15).toArray();
     const customers = [
       { name: 'Aaruhi Patel', phone: '9820000001', city: 'Mumbai' },
@@ -217,9 +218,9 @@ export async function GET(req, { params }) {
             ...c,
             children: build(cats, c.id),
           }));
-        return json({ categories: build(flat) });
+        return json({ categories: build(flat) }, 200, true);
       }
-      return json({ categories: flat });
+      return json({ categories: flat }, 200, true);
     }
 
     if (path.startsWith('categories/')) {
@@ -303,7 +304,7 @@ export async function GET(req, { params }) {
       if (sort === 'newest') sortObj = { createdAt: -1 };
       const total = await db.collection('products').countDocuments(filter);
       const products = await db.collection('products').find(filter, { projection: { _id: 0 } }).sort(sortObj).skip(offset).limit(limit).toArray();
-      return json({ products, total });
+      return json({ products, total }, 200, true);
     }
     if (path.startsWith('products/')) {
       const id = path.replace('products/', '');
