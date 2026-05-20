@@ -472,6 +472,12 @@ export async function GET(req, { params }) {
       const prescriptions = await db.collection('prescriptions').find(userId ? { userId } : {}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
       return json({ prescriptions });
     }
+    if (path === 'prescriptions/approved') {
+      const userId = searchParams.get('userId');
+      if (!userId) return json({ approved: false }, 200);
+      const approved = await db.collection('prescriptions').findOne({ userId, status: 'Approved' }, { projection: { _id: 0 } });
+      return json({ approved: !!approved, prescription: approved || null });
+    }
     if (path === 'admin/prescriptions') {
       const admin = await requireAdmin(req, db);
       if (admin.error) return admin.error;

@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 
 const statusColors = {
   'Under Review': 'bg-amber-100 text-amber-800',
+  'Approved': 'bg-emerald-100 text-emerald-800',
   'Confirmed': 'bg-blue-100 text-blue-800',
   'Delivered': 'bg-emerald-100 text-emerald-800',
   'Rejected': 'bg-rose-100 text-rose-700',
@@ -87,6 +88,7 @@ const RxDetail = () => {
                 <Button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold"><MessageCircle className="w-4 h-4 mr-2" /> Open WhatsApp <ExternalLink className="w-3 h-3 ml-1" /></Button>
               </a>
               <a href={`tel:+${waNumber}`}><Button variant="outline" className="w-full rounded-xl font-semibold"><Phone className="w-4 h-4 mr-2" /> Call Customer</Button></a>
+              <Button onClick={() => setStatus('Approved')} variant="outline" className="w-full rounded-xl font-semibold text-emerald-700 hover:bg-emerald-50"><Check className="w-4 h-4 mr-2" /> Approve Rx</Button>
               <Button onClick={() => setStatus('Confirmed')} variant="outline" className="w-full rounded-xl font-semibold text-blue-700 hover:bg-blue-50"><Check className="w-4 h-4 mr-2" /> Mark Confirmed</Button>
               <Button onClick={() => setStatus('Delivered')} variant="outline" className="w-full rounded-xl font-semibold text-emerald-700 hover:bg-emerald-50"><Check className="w-4 h-4 mr-2" /> Mark Delivered</Button>
               <Button onClick={() => setStatus('Rejected')} variant="outline" className="w-full rounded-xl font-semibold text-rose-700 hover:bg-rose-50 sm:col-span-2"><X className="w-4 h-4 mr-2" /> Reject Prescription</Button>

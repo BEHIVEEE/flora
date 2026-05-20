@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronRight, Star, ShieldCheck, Truck, BadgePercent, Minus, Plus, ShoppingCart, Heart, Share2, Check } from 'lucide-react';
+import { ChevronRight, Star, ShieldCheck, Truck, BadgePercent, Minus, Plus, ShoppingCart, Heart, Share2, Check, FileText } from 'lucide-react';
 import { useCart } from '@/components/CartProvider';
 import ProductCard from '@/components/ProductCard';
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,15 @@ const PDP = () => {
   const discount = Math.round(((p.mrp - p.price) / p.mrp) * 100);
 
   const handleAdd = () => {
-    addItem(p, qty);
+    const result = addItem(p, qty);
+    if (result?.ok === false) {
+      if (result.error === 'rx_required') {
+        toast.error('Prescription required', { description: 'Upload a prescription and get it approved by our pharmacist first.' });
+      } else {
+        toast.error(result.message || 'Could not add to cart');
+      }
+      return;
+    }
     toast.success(`Added ${qty} × ${p.name} to cart`);
   };
 
@@ -84,6 +92,16 @@ const PDP = () => {
               <div className="mt-3 text-sm font-semibold text-rose-600">Currently out of stock</div>
             )}
           </div>
+
+          {p.prescription && (
+            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
+              <FileText className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <div className="text-sm font-bold text-amber-800">Prescription Required</div>
+                <div className="text-xs text-amber-700 mt-0.5">This medicine requires a valid prescription. <Link href="/prescription" className="font-bold underline">Upload yours now</Link> and our pharmacist will review it.</div>
+              </div>
+            </div>
+          )}
 
           <div className="mt-6 hidden md:flex items-center gap-3">
             <div className="inline-flex items-center border border-slate-300 rounded-full overflow-hidden">
