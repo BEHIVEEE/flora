@@ -106,10 +106,10 @@ const CategoryManager = () => {
           </div>
           <div>
             <Label className="text-xs font-semibold text-slate-700">Parent Category</Label>
-            <Select value={form.parentCategoryId} onValueChange={v => setForm({ ...form, parentCategoryId: v })}>
+            <Select value={form.parentCategoryId || '__none__'} onValueChange={v => setForm({ ...form, parentCategoryId: v === '__none__' ? '' : v })}>
               <SelectTrigger className="mt-1.5 h-11 rounded-xl bg-white"><SelectValue placeholder="None (main category)" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None (main category)</SelectItem>
+                <SelectItem value="__none__">None (main category)</SelectItem>
                 {allFlat.map(c => (
                   <SelectItem key={c.id} value={c.id}>
                     {'\u00A0'.repeat(c.depth * 2)}{c.name}
