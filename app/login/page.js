@@ -73,7 +73,12 @@ const LoginInner = () => {
             </div>
           )}
         </form>
-        <div className="text-center mt-5 text-xs text-slate-500">© {new Date().getFullYear()} ChemistShop · <Link href="/" className="hover:text-teal-700">Back to storefront</Link></div>
+        <div className="text-center mt-4">
+          <Link href="/rider/login" className="inline-flex items-center gap-1.5 text-xs font-bold text-teal-700 hover:text-teal-800">
+            Are you a delivery rider? <span className="underline">Sign in here</span>
+          </Link>
+        </div>
+        <div className="text-center mt-3 text-xs text-slate-500">© {new Date().getFullYear()} ChemistShop · <Link href="/" className="hover:text-teal-700">Back to storefront</Link></div>
       </div>
     </div>
   );
