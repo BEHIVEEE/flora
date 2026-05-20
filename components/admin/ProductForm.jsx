@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Save, X, Boxes } from 'lucide-react';
+import { ChevronLeft, Save, X, Boxes, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -75,8 +75,27 @@ const ProductForm = ({ title, initial = {}, onSave, saving }) => {
             </div>
           </Card>
 
-          <Card title="Product Images" subtitle="Upload up to 6 photos. Drag & drop or click.">
-            <ImageUploader images={form.images} onChange={(imgs) => update('images', imgs)} />
+          <Card title="Product Images" subtitle="Upload, paste image URLs, or find images on the web.">
+            {form.name?.trim() && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                <a
+                  href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(form.name + ' ' + (form.brand || ''))}`}
+                  target="_blank" rel="noopener"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-50 hover:bg-teal-100 text-teal-700 text-xs font-bold border border-teal-200"
+                >
+                  <Search className="w-3.5 h-3.5" /> Find images on Google
+                </a>
+                <a
+                  href={`https://www.bing.com/images/search?q=${encodeURIComponent(form.name + ' ' + (form.brand || ''))}`}
+                  target="_blank" rel="noopener"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold border border-slate-200"
+                >
+                  <Search className="w-3.5 h-3.5" /> Bing Images
+                </a>
+                <span className="text-[11px] text-slate-500 self-center">→ right-click an image → Copy image address → paste below</span>
+              </div>
+            )}
+            <ImageUploader images={form.images} onChange={(imgs) => update('images', typeof imgs === 'function' ? imgs(form.images) : imgs)} />
           </Card>
         </div>
 

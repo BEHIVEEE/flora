@@ -1,6 +1,6 @@
 'use client';
 import { useRef, useState, useCallback } from 'react';
-import { Upload, X, Star, Loader2 } from 'lucide-react';
+import { Upload, X, Star, Loader2, Link2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -10,6 +10,8 @@ const ImageUploader = ({ images = [], onChange, max = 6, folder = 'chemistshop/p
   const fileRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState({}); // { [previewUrl]: true }
+  const [urlInput, setUrlInput] = useState('');
+  const [showUrlBox, setShowUrlBox] = useState(false);
 
   const getAuthHeader = () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('cs_token') : '';
@@ -61,6 +63,18 @@ const ImageUploader = ({ images = [], onChange, max = 6, folder = 'chemistshop/p
         setUploading(prev => { const next = { ...prev }; delete next[previewUrl]; return next; });
       }
     }
+  };
+
+  const addUrls = () => {
+    const urls = urlInput.split(/[\n,]+/).map(u => u.trim()).filter(u => /^https?:\/\//i.test(u));
+    if (!urls.length) { toast.error('Paste at least one valid image URL'); return; }
+    const remaining = max - images.length;
+    const next = urls.slice(0, remaining);
+    if (next.length < urls.length) toast.warning(`Only added ${next.length} (max ${max} images)`);
+    onChange([...images, ...next]);
+    setUrlInput('');
+    setShowUrlBox(false);
+    toast.success(`Added ${next.length} image${next.length > 1 ? 's' : ''}`);
   };
 
   const remove = (i) => onChange(images.filter((_, idx) => idx !== i));
@@ -127,7 +141,31 @@ const ImageUploader = ({ images = [], onChange, max = 6, folder = 'chemistshop/p
         )}
       </div>
       <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={e => { processFiles(e.target.files); e.target.value = ''; }} />
-      <div className="mt-2 text-xs text-slate-500">{images.length} / {max} images · Max 2MB each · First image is the product cover</div>
+
+      <div className="mt-3 flex items-center justify-between flex-wrap gap-2">
+        <div className="text-xs text-slate-500">{images.length} / {max} images · Max 2MB each · First image is the product cover</div>
+        <button type="button" onClick={() => setShowUrlBox(s => !s)} className="text-xs font-bold text-teal-700 hover:text-teal-800 inline-flex items-center gap-1">
+          <Link2 className="w-3.5 h-3.5" /> {showUrlBox ? 'Cancel' : 'Paste image URL(s)'}
+        </button>
+      </div>
+
+      {showUrlBox && (
+        <div className="mt-2 p-3 border border-slate-200 rounded-xl bg-slate-50">
+          <div className="text-[11px] font-semibold text-slate-700 mb-1.5">Paste one or more image URLs (one per line, or comma-separated)</div>
+          <textarea
+            value={urlInput}
+            onChange={e => setUrlInput(e.target.value)}
+            rows={3}
+            placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.png"
+            className="w-full text-xs rounded-lg border border-slate-200 p-2 bg-white focus:outline-none focus:border-teal-500"
+          />
+          <div className="mt-2 flex justify-end">
+            <button type="button" onClick={addUrls} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold">
+              <Plus className="w-3.5 h-3.5" /> Add Images
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
