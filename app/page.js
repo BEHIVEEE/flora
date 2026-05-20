@@ -157,7 +157,9 @@ const Home = () => {
                 <Link href="/prescription">
                   <Button size="lg" className="bg-white text-teal-700 hover:bg-teal-50 rounded-full h-12 px-6 font-bold shadow-lift"><Upload className="mr-2 w-4 h-4" /> Upload Prescription</Button>
                 </Link>
-                <Button size="lg" variant="outline" className="border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white rounded-full h-12 px-6 font-semibold"><MessageCircle className="mr-2 w-4 h-4" /> Chat with Pharmacist</Button>
+                <Link href="/chat">
+                  <Button size="lg" variant="outline" className="border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white rounded-full h-12 px-6 font-semibold"><MessageCircle className="mr-2 w-4 h-4" /> Chat with Pharmacist</Button>
+                </Link>
               </div>
             </div>
             <div className="relative h-60 md:h-72">

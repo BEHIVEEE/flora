@@ -499,6 +499,35 @@ export async function GET(req, { params }) {
       const messages = await db.collection('rx_messages').find({ prescriptionId: id }, { projection: { _id: 0 } }).sort({ createdAt: 1 }).toArray();
       return json({ messages });
     }
+
+    // Chat (general pharmacist conversations)
+    if (path === 'chat/thread') {
+      const userId = searchParams.get('userId');
+      if (!userId) return json({ thread: null });
+      const thread = await db.collection('chat_threads').findOne({ userId, status: 'open' }, { projection: { _id: 0 } });
+      return json({ thread });
+    }
+    if (path === 'chat/messages') {
+      const threadId = searchParams.get('threadId');
+      if (!threadId) return json({ messages: [] });
+      const messages = await db.collection('chat_messages').find({ threadId }, { projection: { _id: 0 } }).sort({ createdAt: 1 }).toArray();
+      return json({ messages });
+    }
+    if (path === 'admin/chats') {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const threads = await db.collection('chat_threads').find({}, { projection: { _id: 0 } }).sort({ lastMessageAt: -1 }).limit(200).toArray();
+      return json({ threads });
+    }
+    if (path.startsWith('admin/chats/')) {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const id = path.replace('admin/chats/', '');
+      const thread = await db.collection('chat_threads').findOne({ id }, { projection: { _id: 0 } });
+      if (!thread) return json({ error: 'Thread not found' }, 404);
+      const messages = await db.collection('chat_messages').find({ threadId: id }, { projection: { _id: 0 } }).sort({ createdAt: 1 }).toArray();
+      return json({ thread, messages });
+    }
     if (path.startsWith('prescriptions/')) {
       const id = path.replace('prescriptions/', '');
       const prescription = await db.collection('prescriptions').findOne({ id }, { projection: { _id: 0 } });
@@ -833,6 +862,46 @@ export async function POST(req, { params }) {
       const id = path.split('/')[1];
       const msg = { id: 'msg-' + uuidv4().slice(0, 8), prescriptionId: id, sender: body.sender || 'admin', authorName: body.authorName || 'Pharmacist', text: body.text || '', createdAt: new Date().toISOString() };
       await db.collection('rx_messages').insertOne({ ...msg });
+      return json({ message: msg });
+    }
+
+    // Chat: start or get user's open thread
+    if (path === 'chat/thread') {
+      const { userId, userName, userEmail } = body;
+      if (!userId) return json({ ok: false, error: 'userId required' }, 400);
+      let thread = await db.collection('chat_threads').findOne({ userId, status: 'open' }, { projection: { _id: 0 } });
+      if (!thread) {
+        thread = {
+          id: 'ct-' + uuidv4().slice(0, 10),
+          userId,
+          userName: userName || 'Customer',
+          userEmail: userEmail || '',
+          status: 'open',
+          unreadAdmin: false,
+          unreadUser: false,
+          lastMessageAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        };
+        await db.collection('chat_threads').insertOne({ ...thread });
+      }
+      return json({ thread });
+    }
+
+    // Chat: post a message (sender: 'user' | 'admin')
+    if (path === 'chat/messages') {
+      const { threadId, sender, authorName, text } = body;
+      if (!threadId || !text) return json({ ok: false, error: 'threadId and text required' }, 400);
+      const msg = {
+        id: 'cm-' + uuidv4().slice(0, 10),
+        threadId,
+        sender: sender === 'admin' ? 'admin' : 'user',
+        authorName: authorName || (sender === 'admin' ? 'Pharmacist' : 'Customer'),
+        text: String(text).slice(0, 2000),
+        createdAt: new Date().toISOString(),
+      };
+      await db.collection('chat_messages').insertOne({ ...msg });
+      const setUnread = msg.sender === 'user' ? { unreadAdmin: true, unreadUser: false } : { unreadAdmin: false, unreadUser: true };
+      await db.collection('chat_threads').updateOne({ id: threadId }, { $set: { lastMessageAt: msg.createdAt, lastMessageText: msg.text, ...setUnread } });
       return json({ message: msg });
     }
 
