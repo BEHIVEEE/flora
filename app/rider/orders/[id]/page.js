@@ -53,7 +53,11 @@ const RiderOrderDetail = () => {
 
   const addr = order.address || {};
   const fullAddress = `${addr.line1 || ''}, ${addr.line2 ? addr.line2 + ', ' : ''}${addr.city || ''}, ${addr.state || ''} - ${addr.pincode || ''}`;
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`;
+  // Prefer precise coords for turn-by-turn directions; fall back to text search.
+  const hasCoords = addr.lat != null && addr.lng != null;
+  const mapsUrl = hasCoords
+    ? `https://www.google.com/maps/dir/?api=1&destination=${addr.lat},${addr.lng}&travelmode=driving`
+    : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(fullAddress)}&travelmode=driving`;
   const callUrl = addr.phone ? `tel:${addr.phone}` : '#';
 
   return (
@@ -82,7 +86,7 @@ const RiderOrderDetail = () => {
           </div>
           <div className="space-y-2 text-sm">
             <div className="font-bold text-slate-900">{addr.name}</div>
-            <div className="flex items-start gap-2 text-slate-600"><MapPin className="w-4 h-4 text-teal-600 mt-0.5 shrink-0" /><div>{fullAddress}</div></div>
+            <div className="flex items-start gap-2 text-slate-600"><MapPin className="w-4 h-4 text-teal-600 mt-0.5 shrink-0" /><div>{fullAddress}{hasCoords && <span className="ml-1 text-[10px] font-bold text-emerald-700">· GPS</span>}</div></div>
             <div className="flex items-center gap-2 text-slate-600"><Phone className="w-4 h-4 text-teal-600" /> {addr.phone}</div>
             <div className="flex items-center gap-2 text-slate-600"><CreditCard className="w-4 h-4 text-teal-600" /> Payment: <span className="font-bold text-slate-900">{order.payment}</span></div>
           </div>

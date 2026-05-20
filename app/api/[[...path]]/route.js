@@ -573,6 +573,19 @@ export async function GET(req, { params }) {
       const orders = await db.collection('orders').find(filter, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
       return json({ orders });
     }
+    // Unassigned orders any rider can claim
+    if (path === 'rider/available') {
+      const rider = await requireRider(req, db);
+      if (rider.error) return rider.error;
+      const orders = await db.collection('orders').find(
+        { $and: [
+          { $or: [{ riderId: null }, { riderId: { $exists: false } }] },
+          { status: { $nin: ['Delivered', 'Cancelled'] } },
+        ] },
+        { projection: { _id: 0 } }
+      ).sort({ createdAt: -1 }).limit(50).toArray();
+      return json({ orders });
+    }
 
     return json({ error: 'Not found', path }, 404);
   } catch (e) {
@@ -1049,6 +1062,33 @@ export async function PUT(req, { params }) {
       await db.collection('orders').updateOne({ id }, { $set: update });
       const order = await db.collection('orders').findOne({ id }, { projection: { _id: 0 } });
       return json({ ok: true, order });
+    }
+
+    // Order: rider claims an unassigned order (self-assign)
+    if (path.startsWith('orders/') && path.endsWith('/claim')) {
+      const id = path.replace('orders/', '').replace('/claim', '');
+      const rider = await requireRider(req, db);
+      if (rider.error) return rider.error;
+      const order = await db.collection('orders').findOne({ id }, { projection: { _id: 0 } });
+      if (!order) return json({ ok: false, error: 'Order not found' }, 404);
+      if (order.riderId && order.riderId !== rider.user.id) return json({ ok: false, error: 'Order already claimed by another rider' }, 409);
+      if (['Delivered', 'Cancelled'].includes(order.status)) return json({ ok: false, error: 'Order is closed' }, 400);
+      const now = new Date().toISOString();
+      const update = {
+        riderId: rider.user.id,
+        riderAssignedAt: now,
+        status: order.status === 'Pending' ? 'Confirmed' : order.status,
+        updatedAt: now,
+        trackingSteps: [
+          { label: 'Order Confirmed', done: true },
+          { label: 'Packed', done: true },
+          { label: 'Out for Delivery', done: false },
+          { label: 'Delivered', done: false },
+        ],
+      };
+      await db.collection('orders').updateOne({ id }, { $set: update });
+      const updated = await db.collection('orders').findOne({ id }, { projection: { _id: 0 } });
+      return json({ ok: true, order: updated });
     }
 
     // Order: rider updates status (rider only)

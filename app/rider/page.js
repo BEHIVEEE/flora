@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Bike, LogOut, Phone, MapPin, Package, Clock, CheckCircle2, Truck, ChevronRight, RefreshCw } from 'lucide-react';
+import { Bike, LogOut, Phone, MapPin, Package, Clock, CheckCircle2, Truck, ChevronRight, RefreshCw, Navigation } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
@@ -48,7 +48,7 @@ const RiderDashboard = () => {
 
   const active = orders.filter(o => !['Delivered', 'Cancelled'].includes(o.status));
   const completed = orders.filter(o => ['Delivered', 'Cancelled'].includes(o.status));
-  const list = tab === 'active' ? active : completed;
+  const list = tab === 'available' ? available : tab === 'active' ? active : completed;
 
   const todayDelivered = orders.filter(o => {
     if (o.status !== 'Delivered' || !o.deliveryCompletedAt) return false;
@@ -82,8 +82,9 @@ const RiderDashboard = () => {
         {/* Tabs */}
         <div className="flex items-center justify-between mb-4 gap-2">
           <div className="bg-white border border-slate-200 rounded-full p-1 inline-flex">
-            <button onClick={() => setTab('active')} className={`px-4 py-1.5 rounded-full text-sm font-bold ${tab === 'active' ? 'bg-teal-600 text-white' : 'text-slate-600'}`}>Active ({active.length})</button>
-            <button onClick={() => setTab('completed')} className={`px-4 py-1.5 rounded-full text-sm font-bold ${tab === 'completed' ? 'bg-teal-600 text-white' : 'text-slate-600'}`}>Completed ({completed.length})</button>
+            <button onClick={() => setTab('available')} className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold ${tab === 'available' ? 'bg-teal-600 text-white' : 'text-slate-600'}`}>Available ({available.length})</button>
+            <button onClick={() => setTab('active')} className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold ${tab === 'active' ? 'bg-teal-600 text-white' : 'text-slate-600'}`}>Active ({active.length})</button>
+            <button onClick={() => setTab('completed')} className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold ${tab === 'completed' ? 'bg-teal-600 text-white' : 'text-slate-600'}`}>Completed ({completed.length})</button>
           </div>
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 uppercase tracking-wider">
@@ -100,36 +101,66 @@ const RiderDashboard = () => {
           <div className="text-center py-16 bg-white rounded-2xl border border-slate-200">
             <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
             <div className="font-bold text-slate-900">No {tab} orders</div>
-            <p className="text-sm text-slate-500 mt-1">{tab === 'active' ? 'New assignments will appear here' : 'Completed deliveries will show here'}</p>
+            <p className="text-sm text-slate-500 mt-1">{tab === 'available' ? 'New customer orders will appear here for you to accept' : tab === 'active' ? 'Orders you accept will show here' : 'Completed deliveries will show here'}</p>
           </div>
         ) : (
           <div className="space-y-2.5">
-            {list.map(o => (
-              <Link key={o.id} href={`/rider/orders/${o.id}`} className="block bg-white rounded-2xl border border-slate-200 p-4 hover:border-teal-300 hover:shadow-soft transition-all">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="font-bold text-slate-900 text-sm">{o.id.slice(0, 16)}…</div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${statusColors[o.status] || 'bg-slate-100 text-slate-700'}`}>{o.status}</span>
+            {list.map(o => {
+              const a = o.address || {};
+              const hasCoords = a.lat != null && a.lng != null;
+              const fullAddr = `${a.line1 || ''}, ${a.line2 ? a.line2 + ', ' : ''}${a.city || ''}, ${a.state || ''} - ${a.pincode || ''}`;
+              const mapsUrl = hasCoords
+                ? `https://www.google.com/maps/dir/?api=1&destination=${a.lat},${a.lng}&travelmode=driving`
+                : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(fullAddr)}&travelmode=driving`;
+              return (
+                <div key={o.id} className="bg-white rounded-2xl border border-slate-200 p-4 hover:border-teal-300 hover:shadow-soft transition-all">
+                  <Link href={`/rider/orders/${o.id}`} className="block">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="font-bold text-slate-900 text-sm">{o.id.slice(0, 16)}…</div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${statusColors[o.status] || 'bg-slate-100 text-slate-700'}`}>{o.status}</span>
+                    </div>
+                    <div className="flex items-start gap-2 text-sm">
+                      <MapPin className="w-4 h-4 text-teal-600 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-slate-900 truncate">{a.name}</div>
+                        <div className="text-xs text-slate-500 line-clamp-2">{a.line1}, {a.city} - {a.pincode}{hasCoords && <span className="ml-1 text-[10px] font-bold text-emerald-700">· GPS</span>}</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-3 text-xs text-slate-500">
+                        <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {a.phone}</span>
+                        <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {o.items?.length} items</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-black text-slate-900 text-sm">₹{o.total}</span>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">{o.payment}</span>
+                        <ChevronRight className="w-4 h-4 text-slate-400" />
+                      </div>
+                    </div>
+                  </Link>
+                  {tab === 'active' && (
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex gap-2">
+                      <a href={a.phone ? `tel:${a.phone}` : '#'} onClick={(e) => !a.phone && e.preventDefault()} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold">
+                        <Phone className="w-3.5 h-3.5" /> Call
+                      </a>
+                      <a href={mapsUrl} target="_blank" rel="noopener" className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold">
+                        <Navigation className="w-3.5 h-3.5" /> Navigate
+                      </a>
+                    </div>
+                  )}
+                  {tab === 'available' && (
+                    <div className="mt-3 pt-3 border-t border-slate-100 flex gap-2">
+                      <a href={mapsUrl} target="_blank" rel="noopener" className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold">
+                        <Navigation className="w-3.5 h-3.5" /> Preview
+                      </a>
+                      <Button onClick={() => claim(o.id)} disabled={claiming === o.id} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white rounded-full h-9 text-xs font-bold">
+                        {claiming === o.id ? 'Claiming…' : 'Accept Order'}
+                      </Button>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-start gap-2 text-sm">
-                  <MapPin className="w-4 h-4 text-teal-600 mt-0.5 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-slate-900 truncate">{o.address?.name}</div>
-                    <div className="text-xs text-slate-500 line-clamp-2">{o.address?.line1}, {o.address?.city} - {o.address?.pincode}</div>
-                  </div>
-                </div>
-                <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-3 text-xs text-slate-500">
-                    <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {o.address?.phone}</span>
-                    <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {o.items?.length} items</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-black text-slate-900 text-sm">₹{o.total}</span>
-                    <span className="text-[10px] font-bold text-slate-500 uppercase">{o.payment}</span>
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
-                  </div>
-                </div>
-              </Link>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

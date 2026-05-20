@@ -71,7 +71,6 @@ const Footer = () => {
             <h4 className="font-semibold text-slate-900 mb-3 text-sm">Help</h4>
             <ul className="space-y-2 text-sm text-slate-600">
               <li><Link href="/prescription" className="hover:text-teal-700">Upload Prescription</Link></li>
-              <li><Link href="/account" className="hover:text-teal-700">Track Order</Link></li>
               <li><a href="#" className="hover:text-teal-700">Returns & Refunds</a></li>
               <li><a href="#" className="hover:text-teal-700">FAQ</a></li>
               <li><a href="#" className="hover:text-teal-700">Privacy Policy</a></li>

@@ -85,7 +85,6 @@ const Header = () => {
           </div>
           <div className="flex items-center gap-4">
             <Link href="/prescription" className="hover:underline">Upload Prescription</Link>
-            <Link href="/account" className="hover:underline">Track Order</Link>
             <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {contactPhone}</span>
           </div>
         </div>

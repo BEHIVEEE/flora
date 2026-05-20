@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { User, Package, MapPin, FileText, Heart, LogOut, ChevronRight, Plus, Trash2, CheckCircle2, Clock, Truck } from 'lucide-react';
 import { toast } from 'sonner';
+import AddressAutocomplete from '@/components/AddressAutocomplete';
 
 const TABS = [
   { id: 'orders', label: 'My Orders', icon: Package },
@@ -167,7 +168,19 @@ const AddressesTab = ({ userId }) => {
           <div className="grid md:grid-cols-2 gap-3">
             <Field label="Full Name *" value={form.name} onChange={v => setForm({ ...form, name: v })} />
             <Field label="Phone *" value={form.phone} onChange={v => setForm({ ...form, phone: v.replace(/\D/g, '').slice(0, 10) })} />
-            <Field className="md:col-span-2" label="Address *" value={form.line1} onChange={v => setForm({ ...form, line1: v })} />
+            <AddressAutocomplete
+              className="md:col-span-2"
+              label="Address *"
+              value={form.line1}
+              onChange={v => setForm({ ...form, line1: v })}
+              onPick={(p) => setForm(prev => ({
+                ...prev,
+                line1: p.line1 || prev.line1,
+                city: p.city || prev.city,
+                state: p.state || prev.state,
+                pincode: p.pincode || prev.pincode,
+              }))}
+            />
             <Field label="City *" value={form.city} onChange={v => setForm({ ...form, city: v })} />
             <Field label="State *" value={form.state} onChange={v => setForm({ ...form, state: v })} />
             <Field label="Pincode *" value={form.pincode} onChange={v => setForm({ ...form, pincode: v.replace(/\D/g, '').slice(0, 6) })} />

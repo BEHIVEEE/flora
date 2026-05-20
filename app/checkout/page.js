@@ -12,13 +12,14 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ShieldCheck, Truck, Wallet, CreditCard, Smartphone, ChevronRight, MapPin, Lock, Clock, Calendar, Crosshair } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDeliveryRange } from '@/hooks/useDeliveryRange';
+import AddressAutocomplete from '@/components/AddressAutocomplete';
 
 const CheckoutPage = () => {
   const router = useRouter();
   const { items, subtotal, savings, totalQty, clear, userId } = useCart() || {};
   const { deliveryCharge, freeDeliveryAbove, slotsEnabled } = useSettings();
   const [step, setStep] = useState(1);
-  const [address, setAddress] = useState({ name: '', phone: '', email: '', line1: '', line2: '', city: 'Mumbai', state: 'Maharashtra', pincode: '', type: 'Home' });
+  const [address, setAddress] = useState({ name: '', phone: '', email: '', line1: '', line2: '', city: 'Mumbai', state: 'Maharashtra', pincode: '', type: 'Home', lat: null, lng: null });
   const [payment, setPayment] = useState('COD');
   const [placing, setPlacing] = useState(false);
   const [slotDate, setSlotDate] = useState(() => {
@@ -40,6 +41,8 @@ const CheckoutPage = () => {
         city: location.city || prev.city,
         state: location.state || prev.state,
         pincode: location.pincode || prev.pincode,
+        lat: location.lat ?? prev.lat,
+        lng: location.lng ?? prev.lng,
       }));
     }
   }, [location]);
@@ -132,7 +135,24 @@ const CheckoutPage = () => {
                 <Field label="Full Name *" value={address.name} onChange={v => setAddress({ ...address, name: v })} />
                 <Field label="Phone *" value={address.phone} onChange={v => setAddress({ ...address, phone: v.replace(/\D/g, '').slice(0, 10) })} />
                 <Field className="md:col-span-2" label="Email" value={address.email} onChange={v => setAddress({ ...address, email: v })} />
-                <Field className="md:col-span-2" label="Address Line 1 *" value={address.line1} onChange={v => setAddress({ ...address, line1: v })} />
+                <AddressAutocomplete
+                  className="md:col-span-2"
+                  label="Address Line 1 *"
+                  value={address.line1}
+                  onChange={v => setAddress({ ...address, line1: v })}
+                  biasLat={location?.lat}
+                  biasLng={location?.lng}
+                  onPick={(p) => setAddress(prev => ({
+                    ...prev,
+                    line1: p.line1 || prev.line1,
+                    line2: p.line2 || prev.line2,
+                    city: p.city || prev.city,
+                    state: p.state || prev.state,
+                    pincode: p.pincode || prev.pincode,
+                    lat: p.lat ?? prev.lat,
+                    lng: p.lng ?? prev.lng,
+                  }))}
+                />
                 <Field className="md:col-span-2" label="Address Line 2 (Optional)" value={address.line2} onChange={v => setAddress({ ...address, line2: v })} />
                 <Field label="City *" value={address.city} onChange={v => setAddress({ ...address, city: v })} />
                 <Field label="State *" value={address.state} onChange={v => setAddress({ ...address, state: v })} />
