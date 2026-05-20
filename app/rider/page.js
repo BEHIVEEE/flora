@@ -100,7 +100,7 @@ const RiderDashboard = () => {
 
       <div className="max-w-3xl mx-auto px-4 py-4">
         {/* Tabs */}
-        <div className="flex items-center justify-between mb-4 gap-2">
+        <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
           <div className="bg-white border border-slate-200 rounded-full p-1 inline-flex">
             <button onClick={() => setTab('available')} className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold ${tab === 'available' ? 'bg-teal-600 text-white' : 'text-slate-600'}`}>Available ({available.length})</button>
             <button onClick={() => setTab('active')} className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold ${tab === 'active' ? 'bg-teal-600 text-white' : 'text-slate-600'}`}>Active ({active.length})</button>
