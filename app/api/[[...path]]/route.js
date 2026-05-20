@@ -28,9 +28,17 @@ const CORS = {
   'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
-const CACHE = { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120' };
+// Tiered cache TTLs. Edge caches at Vercel; SWR keeps responses snappy while revalidating.
+const CACHE_SHORT = { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120' };   // product lists (changing)
+const CACHE_MED   = { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' };  // product detail
+const CACHE_LONG  = { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200' };// categories, settings
+const NO_CACHE    = { 'Cache-Control': 'private, no-store' };
 const json = (data, status = 200, cache = false) => {
-  const headers = cache ? { ...CORS, ...CACHE } : CORS;
+  let headers = CORS;
+  if (cache === true || cache === 'short') headers = { ...CORS, ...CACHE_SHORT };
+  else if (cache === 'med') headers = { ...CORS, ...CACHE_MED };
+  else if (cache === 'long') headers = { ...CORS, ...CACHE_LONG };
+  else if (cache === 'none') headers = { ...CORS, ...NO_CACHE };
   return NextResponse.json(data, { status, headers });
 };
 
@@ -334,7 +342,7 @@ export async function GET(req, { params }) {
       const product = await db.collection('products').findOne({ id }, { projection: { _id: 0 } });
       if (!product) return json({ error: 'Product not found' }, 404);
       const related = await db.collection('products').find({ category: product.category, id: { $ne: id } }, { projection: { _id: 0 } }).limit(8).toArray();
-      return json({ product, related });
+      return json({ product, related }, 200, 'med');
     }
 
     if (path === 'orders') {
