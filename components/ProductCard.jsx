@@ -21,14 +21,14 @@ const ProductCard = ({ product, compact = false }) => {
   };
 
   return (
-    <Link href={`/product/${product.id}`} className="group relative bg-white border border-slate-200 rounded-2xl p-2 md:p-3 hover:border-teal-300 hover:shadow-lift transition-all duration-300 flex flex-col">
+    <Link href={`/product/${product.id}`} className="group relative bg-white border border-slate-200 rounded-2xl p-2 md:p-3 hover:border-teal-300 hover:shadow-lift transition-all duration-300 flex flex-col w-full min-w-0 max-w-full">
       {discount > 0 && (
         <span className="absolute top-3 left-3 z-10 bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md">{discount}% OFF</span>
       )}
       {product.prescription && (
         <span className="absolute top-3 right-3 z-10 bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-md">Rx</span>
       )}
-      <div className="aspect-square rounded-xl bg-slate-50 overflow-hidden mb-2 md:mb-3 relative">
+      <div className="rounded-xl bg-slate-50 overflow-hidden mb-2 md:mb-3 relative w-full" style={{ aspectRatio: '1 / 1' }}>
         {product.image ? (
           <img
             src={product.image}
