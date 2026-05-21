@@ -28,7 +28,7 @@ const ProductCard = ({ product, compact = false }) => {
       {product.prescription && (
         <span className="absolute top-3 right-3 z-10 bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-md">Rx</span>
       )}
-      <div className="aspect-[3/4] sm:aspect-square rounded-xl bg-slate-50 overflow-hidden mb-3">
+      <div className="aspect-square rounded-xl bg-slate-50 overflow-hidden mb-3">
         <img src={product.image} alt={product.name} loading="lazy" decoding="async" fetchPriority="low" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
       </div>
       <div className="flex-1 flex flex-col">
