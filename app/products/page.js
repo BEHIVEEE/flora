@@ -115,7 +115,7 @@ const ProductsInner = () => {
             </div>
 
             {loading ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">{Array(12).fill(0).map((_, i) => <ProductSkeleton key={i} />)}</div>
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4 pb-16">{Array(12).fill(0).map((_, i) => <ProductSkeleton key={i} />)}</div>
             ) : products.length === 0 ? (
               <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
                 <div className="text-5xl mb-3">🔍</div>
@@ -124,7 +124,7 @@ const ProductsInner = () => {
                 <Link href="/products"><Button className="mt-4 bg-teal-600 hover:bg-teal-700 rounded-full">Browse all</Button></Link>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4 pb-16">
                 {products.map(p => <ProductCard key={p.id} product={p} />)}
               </div>
             )}

@@ -53,7 +53,7 @@ const PDP = () => {
 
       <div className="container max-w-7xl mx-auto px-4 grid md:grid-cols-2 gap-8 md:gap-12">
         <div>
-          <div className="relative aspect-square bg-slate-50 rounded-3xl overflow-hidden border border-slate-100">
+          <div className="relative aspect-[4/5] md:aspect-square bg-slate-50 rounded-3xl overflow-hidden border border-slate-100">
             <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
             {discount > 0 && <span className="absolute top-4 left-4 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
           </div>

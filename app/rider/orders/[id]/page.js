@@ -77,11 +77,11 @@ const RiderOrderDetail = () => {
       <div className="max-w-3xl mx-auto px-4 py-4 space-y-4">
         {/* Customer info */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <h3 className="font-bold text-slate-900">Customer</h3>
-            <div className="flex gap-2">
-              <a href={callUrl} className="px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1"><Phone className="w-3 h-3" /> Call</a>
-              <a href={mapsUrl} target="_blank" rel="noopener" className="px-3 py-1.5 rounded-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold flex items-center gap-1"><Navigation className="w-3 h-3" /> Navigate</a>
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <a href={callUrl} className="flex-1 sm:flex-none px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1"><Phone className="w-3 h-3" /> Call</a>
+              <a href={mapsUrl} target="_blank" rel="noopener" className="flex-1 sm:flex-none px-3 py-1.5 rounded-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold flex items-center justify-center gap-1"><Navigation className="w-3 h-3" /> Navigate</a>
             </div>
           </div>
           <div className="space-y-2 text-sm">
