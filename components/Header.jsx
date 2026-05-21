@@ -155,12 +155,11 @@ const Header = () => {
             <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-lift overflow-hidden z-50">
               {suggestions.map(p => (
                 <button key={p.id} type="button" onMouseDown={() => pickSuggestion(p)} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 text-left border-b border-slate-100 last:border-0">
-                  <img src={p.image} alt="" className="w-10 h-10 rounded-lg object-cover bg-slate-100 shrink-0" />
+                  <img src={p.image} alt="" className="w-9 h-9 rounded-lg object-cover bg-slate-100 shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold text-slate-900 line-clamp-1">{p.name}</div>
-                    <div className="text-xs text-slate-500 line-clamp-1">{p.brand} · {p.packSize}</div>
+                    <div className="text-sm font-semibold text-slate-900 line-clamp-2 leading-snug">{p.name}</div>
+                    <div className="text-[11px] text-slate-500 line-clamp-1">{p.brand}{p.packSize ? ' · ' + p.packSize : ''}</div>
                   </div>
-                  <div className="text-sm font-bold text-teal-700">₹{p.price}</div>
                 </button>
               ))}
               <button type="button" onMouseDown={onSearch} className="w-full px-3 py-2.5 text-xs font-bold text-teal-700 hover:bg-teal-50 text-center bg-slate-50">View all results for "{q}"</button>
