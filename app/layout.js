@@ -23,12 +23,13 @@ const App = ({ children }) => {
   return (
     <html lang="en" className={inter.variable} style={{ colorScheme: 'light' }} suppressHydrationWarning>
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover" />
         <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="" />
         <link rel="preconnect" href="https://images.unsplash.com" crossOrigin="" />
         <link rel="dns-prefetch" href="https://res.cloudinary.com" />
         <link rel="dns-prefetch" href="https://images.unsplash.com" />
       </head>
-      <body className="min-h-screen bg-white text-slate-900 font-sans antialiased pb-20 md:pb-0" suppressHydrationWarning>
+      <body className="min-h-screen bg-white text-slate-900 font-sans antialiased pb-20 md:pb-0 overflow-x-hidden" suppressHydrationWarning>
         <SettingsProvider>
           <AuthProvider>
             <CartProvider>
