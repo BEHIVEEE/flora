@@ -107,7 +107,7 @@ const CheckoutPage = () => {
         <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Checkout</h1>
         <div className="flex items-center gap-2 mt-2 text-xs text-slate-500"><Lock className="w-3 h-3" /> Secure SSL encrypted checkout</div>
 
-        <div className="grid lg:grid-cols-[1fr_360px] gap-6 mt-6">
+        <div className="grid lg:grid-cols-[1fr_360px] gap-5 mt-6">
           <div className="space-y-4">
             {/* Step 1: address */}
             <div className="bg-white rounded-2xl border border-slate-200 p-5">

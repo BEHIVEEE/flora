@@ -50,7 +50,7 @@ const AccountInner = () => {
 
         <div className="grid lg:grid-cols-[260px_1fr] gap-6 mt-6">
           <aside>
-            <div className="bg-white rounded-2xl border border-slate-200 p-2 sticky top-32">
+            <div className="bg-white rounded-2xl border border-slate-200 p-2 lg:sticky lg:top-32">
               {TABS.map(t => {
                 const active = tab === t.id;
                 return (
@@ -153,13 +153,13 @@ const AddressesTab = ({ userId }) => {
   return (
     <div className="space-y-3">
       {list.map(a => (
-        <div key={a.id} className="bg-white rounded-2xl border border-slate-200 p-5 flex items-start justify-between gap-3">
+        <div key={a.id} className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col sm:flex-row items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2"><span className="text-xs font-bold bg-teal-100 text-teal-800 px-2 py-0.5 rounded">{a.type}</span><span className="font-bold text-slate-900">{a.name}</span></div>
             <div className="text-sm text-slate-600 mt-1">{a.line1}, {a.city}, {a.state} - {a.pincode}</div>
             <div className="text-sm text-slate-500 mt-0.5">📞 {a.phone}</div>
           </div>
-          <button onClick={() => del(a.id)} className="text-slate-400 hover:text-rose-600 p-2"><Trash2 className="w-4 h-4" /></button>
+          <button onClick={() => del(a.id)} className="text-slate-400 hover:text-rose-600 p-2 self-start sm:self-center"><Trash2 className="w-4 h-4" /></button>
         </div>
       ))}
       {adding ? (
