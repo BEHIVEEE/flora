@@ -106,13 +106,13 @@ const ProductsInner = () => {
               </Select>
             </div>
 
-            {/* Mobile category pills */}
-            <div className="lg:hidden flex gap-2 overflow-x-auto scrollbar-hide pb-3 -mx-3 px-3">
-              <button onClick={() => setCat('all')} className={`px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap border ${category === 'all' ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-700 border-slate-200'}`}>All</button>
-              {allCats.map(c => (
-                <button key={c.id} onClick={() => setCat(c.id)} className={`px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap border ${category === c.id ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-700 border-slate-200'}`}>{c.name}</button>
-              ))}
-            </div>
+            {/* Active category indicator (mobile) */}
+            {category !== 'all' && activeCat && (
+              <div className="lg:hidden mb-3 inline-flex items-center gap-2 bg-teal-50 border border-teal-200 text-teal-800 px-3 py-1.5 rounded-full text-xs font-semibold">
+                {activeCat.name}
+                <button onClick={() => setCat('all')} className="hover:text-teal-900" aria-label="Clear category"><X className="w-3 h-3" /></button>
+              </div>
+            )}
 
             {loading ? (
               <div className="grid gap-2 md:gap-4 pb-16" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(160px, 100%), 1fr))' }}>{Array(12).fill(0).map((_, i) => <ProductSkeleton key={i} />)}</div>
