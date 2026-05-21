@@ -53,7 +53,7 @@ const ProductsInner = () => {
   };
 
   return (
-    <div className="bg-slate-50 min-h-screen">
+    <div className="bg-slate-50 min-h-screen overflow-x-hidden">
       <div className="bg-white border-b border-slate-200">
         <div className="container max-w-7xl mx-auto px-4 py-4">
           <div className="text-xs text-slate-500 flex items-center gap-1 mb-2">
@@ -107,7 +107,7 @@ const ProductsInner = () => {
             </div>
 
             {/* Mobile category pills */}
-            <div className="lg:hidden flex gap-2 overflow-x-auto scrollbar-hide pb-3 -mx-4 px-4">
+            <div className="lg:hidden flex gap-2 overflow-x-auto scrollbar-hide pb-3 -mx-3 px-3">
               <button onClick={() => setCat('all')} className={`px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap border ${category === 'all' ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-700 border-slate-200'}`}>All</button>
               {allCats.map(c => (
                 <button key={c.id} onClick={() => setCat(c.id)} className={`px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap border ${category === c.id ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-700 border-slate-200'}`}>{c.name}</button>
@@ -124,7 +124,7 @@ const ProductsInner = () => {
                 <Link href="/products"><Button className="mt-4 bg-teal-600 hover:bg-teal-700 rounded-full">Browse all</Button></Link>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-4 pb-16">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 md:gap-4 pb-16">
                 {products.map(p => <ProductCard key={p.id} product={p} />)}
               </div>
             )}
