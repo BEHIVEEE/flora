@@ -132,11 +132,11 @@ const Home = () => {
             const Ic = ICONS[c.icon] || Pill;
             const color = CAT_COLORS[i % CAT_COLORS.length];
             return (
-              <Link key={c.id} href={`/category/${c.slug}`} className="group bg-white rounded-2xl border border-slate-200 p-3 md:p-4 hover:shadow-lift hover:border-teal-200 transition-all text-center">
-                <div className={`w-12 h-12 md:w-14 md:h-14 mx-auto rounded-xl bg-gradient-to-br ${color} text-white flex items-center justify-center mb-2 md:mb-3 group-hover:scale-110 transition-transform shadow-lift`}>
+              <Link key={c.id} href={`/category/${c.slug}`} className="group bg-white rounded-2xl border border-slate-200 p-3 md:p-4 hover:shadow-lift hover:border-teal-200 transition-all text-center flex flex-col items-center justify-center min-h-[112px] md:min-h-[128px]">
+                <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gradient-to-br ${color} text-white flex items-center justify-center mb-2 md:mb-3 group-hover:scale-110 transition-transform shadow-lift shrink-0`}>
                   <Ic className="w-6 h-6" />
                 </div>
-                <div className="text-[11px] md:text-sm font-semibold text-slate-800 leading-tight">{c.name}</div>
+                <div className="text-[11px] md:text-sm font-semibold text-slate-800 leading-tight line-clamp-2 text-balance">{c.name}</div>
               </Link>
             );
           })}
