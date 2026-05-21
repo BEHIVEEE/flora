@@ -54,11 +54,11 @@ const Home = () => {
               <span className="w-1.5 h-1.5 rounded-full bg-teal-600 animate-pulse" />
               {tagline} · Trusted by 1L+ families
             </div>
-            <h1 className="text-4xl md:text-6xl font-black text-slate-900 leading-[1.05] tracking-tight text-balance">
+            <h1 className="text-3xl sm:text-4xl md:text-6xl font-black text-slate-900 leading-[1.05] tracking-tight text-balance">
               Your health.<br />
               <span className="bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-700 bg-clip-text text-transparent">Delivered with care.</span>
             </h1>
-            <p className="mt-5 text-base md:text-lg text-slate-600 max-w-lg text-balance">Order medicines, healthcare devices, and wellness essentials from certified pharmacists. Fast delivery, authentic products, expert support — every single time.</p>
+            <p className="mt-4 text-[15px] md:text-lg text-slate-600 max-w-lg text-balance">Order medicines, healthcare devices, and wellness essentials from certified pharmacists. Fast delivery, authentic products, expert support — every single time.</p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link href="/products">
                 <Button size="lg" className="bg-teal-600 hover:bg-teal-700 text-white h-12 px-6 rounded-full shadow-lift font-semibold">Shop Now <ArrowRight className="ml-1 w-4 h-4" /></Button>
@@ -67,7 +67,7 @@ const Home = () => {
                 <Button size="lg" variant="outline" className="h-12 px-6 rounded-full border-teal-200 text-teal-800 hover:bg-teal-50 font-semibold"><Upload className="mr-1 w-4 h-4" /> Upload Prescription</Button>
               </Link>
             </div>
-            <div className="mt-8 grid grid-cols-3 gap-4 max-w-md">
+            <div className="mt-6 grid grid-cols-3 gap-3 md:gap-4 max-w-md">
               {[
                 { icon: Truck, t: 'Free delivery', s: `Above ₹${freeDeliveryAbove}` },
                 { icon: ShieldCheck, t: '100% authentic', s: 'Verified meds' },
@@ -119,7 +119,7 @@ const Home = () => {
       </div>
 
       {/* Categories */}
-      <section className="container max-w-7xl mx-auto px-4 py-12 md:py-16">
+      <section className="container max-w-7xl mx-auto px-4 py-10 md:py-16">
         <div className="flex items-end justify-between mb-7">
           <div>
             <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Shop by Category</h2>
@@ -127,7 +127,7 @@ const Home = () => {
           </div>
           <Link href="/products" className="hidden md:flex items-center text-sm font-semibold text-teal-700 hover:text-teal-800">View all <ArrowRight className="ml-1 w-4 h-4" /></Link>
         </div>
-        <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3 md:gap-4">
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3 md:gap-4">
           {categories.filter(c => c.type === 'main').map((c, i) => {
             const Ic = ICONS[c.icon] || Pill;
             const color = CAT_COLORS[i % CAT_COLORS.length];

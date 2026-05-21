@@ -80,7 +80,7 @@ const ProductsInner = () => {
           </aside>
 
           <div>
-            <div className="flex items-center justify-between mb-4 gap-3">
+            <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
               <Sheet>
                 <SheetTrigger asChild>
                   <Button variant="outline" className="lg:hidden rounded-full"><SlidersHorizontal className="w-4 h-4 mr-2" /> Filter</Button>
@@ -95,7 +95,7 @@ const ProductsInner = () => {
               </Sheet>
               <div className="flex-1" />
               <Select value={sort} onValueChange={setSort}>
-                <SelectTrigger className="w-[180px] rounded-full bg-white"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full sm:w-[180px] rounded-full bg-white"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="popular">Most Popular</SelectItem>
                   <SelectItem value="rating">Best Rated</SelectItem>

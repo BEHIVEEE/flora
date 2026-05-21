@@ -57,9 +57,9 @@ const PDP = () => {
             <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
             {discount > 0 && <span className="absolute top-4 left-4 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
           </div>
-          <div className="grid grid-cols-4 gap-2 mt-3">
+          <div className="mt-3 flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 md:mx-0 md:px-0 md:grid md:grid-cols-4">
             {Array(4).fill(0).map((_, i) => (
-              <div key={i} className="aspect-square bg-slate-50 rounded-xl border border-slate-200 overflow-hidden hover:border-teal-400 cursor-pointer">
+              <div key={i} className="shrink-0 w-24 h-24 md:w-auto md:h-auto aspect-square bg-slate-50 rounded-xl border border-slate-200 overflow-hidden hover:border-teal-400 cursor-pointer">
                 <img src={p.image} alt="" className="w-full h-full object-cover" />
               </div>
             ))}
