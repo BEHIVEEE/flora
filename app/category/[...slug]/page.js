@@ -132,7 +132,7 @@ const CategoryPage = () => {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid gap-2 md:gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(160px, 100%), 1fr))' }}>
             {Array(8).fill(0).map((_, i) => <ProductSkeleton key={i} />)}
           </div>
         ) : products.length === 0 ? (
@@ -141,7 +141,7 @@ const CategoryPage = () => {
             <p className="text-slate-500 mt-2">Products will appear here once they are added to this category.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-16">
+          <div className="grid gap-2 md:gap-4 pb-16" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(160px, 100%), 1fr))' }}>
             {products.map(p => <ProductCard key={p.id} product={p} />)}
           </div>
         )}
