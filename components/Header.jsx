@@ -148,8 +148,8 @@ const Header = () => {
         <form onSubmit={onSearch} className="flex-1 max-w-2xl mx-auto relative">
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} onFocus={() => setShowSuggest(true)} onBlur={() => setTimeout(() => setShowSuggest(false), 150)} placeholder="Search medicines, devices, wellness…" className="pl-10 pr-20 h-11 rounded-full border-slate-200 bg-slate-50/70 focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-100" />
-            <Button type="submit" size="sm" className="absolute right-1.5 top-1/2 -translate-y-1/2 h-8 rounded-full bg-teal-600 hover:bg-teal-700 text-white px-4">Search</Button>
+            <Input value={q} onChange={(e) => setQ(e.target.value)} onFocus={() => setShowSuggest(true)} onBlur={() => setTimeout(() => setShowSuggest(false), 150)} placeholder="Search medicines, devices, wellness…" className="pl-10 pr-4 h-11 rounded-full border-slate-200 bg-slate-50/70 focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-100" />
+            <button type="submit" className="sr-only">Search</button>
           </div>
           {showSuggest && suggestions.length > 0 && (
             <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-lift overflow-hidden z-50">
