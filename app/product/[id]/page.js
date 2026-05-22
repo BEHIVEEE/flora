@@ -40,7 +40,7 @@ const PDP = () => {
   };
 
   return (
-    <div className="bg-white pb-56 md:pb-0">
+    <div className="bg-white pb-64 md:pb-0">
       <div className="container max-w-7xl mx-auto px-3 md:px-4 py-3 md:py-4">
         <div className="text-[11px] text-slate-500 flex items-center gap-1 flex-wrap">
           <Link href="/" className="hover:text-teal-700">Home</Link>
@@ -53,13 +53,13 @@ const PDP = () => {
 
       <div className="container max-w-7xl mx-auto px-3 md:px-4 grid md:grid-cols-2 gap-5 md:gap-12">
         <div>
-          {/* Mobile: ENTIRE product photo visible — never cropped */}
-          <div className="md:hidden relative mx-auto w-full max-w-[320px]">
+          {/* Mobile: tiny hero — FULL photo visible, page fully usable */}
+          <div className="md:hidden relative mx-auto w-full max-w-[240px]">
             <img 
               src={p.image} 
               alt={p.name} 
               className="w-full h-auto object-contain bg-slate-50 rounded-2xl border border-slate-100" 
-              style={{ maxHeight: '45vh' }}
+              style={{ maxHeight: '90px' }}
             />
             {discount > 0 && <span className="absolute top-3 left-3 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
           </div>
