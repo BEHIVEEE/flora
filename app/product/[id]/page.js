@@ -65,7 +65,7 @@ const PDP = () => {
         </div>
 
         {/* Thumbnail strip */}
-        <div className="mt-2 px-3 flex gap-2 overflow-x-auto scrollbar-hide">
+        <div className="mt-2 px-3 flex gap-2 overflow-x-auto scrollbar-hide justify-center">
           {Array(4).fill(0).map((_, i) => (
             <div key={i} className="shrink-0 w-14 h-14 bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
               <img src={p.image} alt="" className="w-full h-full object-cover" />
