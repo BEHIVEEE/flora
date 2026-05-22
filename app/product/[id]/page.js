@@ -40,8 +40,9 @@ const PDP = () => {
   };
 
   return (
-    <div className="bg-white pb-64 md:pb-0">
-      <div className="container max-w-7xl mx-auto px-3 md:px-4 py-3 md:py-4">
+    <div className="bg-white pb-36 md:pb-0">
+      {/* Breadcrumb */}
+      <div className="container max-w-7xl mx-auto px-3 md:px-4 py-2 md:py-4">
         <div className="text-[11px] text-slate-500 flex items-center gap-1 flex-wrap">
           <Link href="/" className="hover:text-teal-700">Home</Link>
           <ChevronRight className="w-3 h-3" />
@@ -51,101 +52,87 @@ const PDP = () => {
         </div>
       </div>
 
-      <div className="container max-w-7xl mx-auto px-3 md:px-4 grid md:grid-cols-2 gap-5 md:gap-12">
-        <div>
-          {/* Mobile: minimal hero — FULL photo visible, page fully usable */}
-          <div className="md:hidden relative mx-auto w-full max-w-[200px]">
-            <img 
-              src={p.image} 
-              alt={p.name} 
-              className="w-full h-auto object-contain bg-slate-50 rounded-xl border border-slate-100" 
-              style={{ maxHeight: '60px' }}
-            />
-            {discount > 0 && <span className="absolute -top-1 -left-1 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">{discount}% OFF</span>}
-          </div>
-
-          {/* Desktop: square cover */}
-          <div className="hidden md:block relative bg-slate-50 rounded-3xl overflow-hidden border border-slate-100 mx-auto w-full md:max-w-none" style={{ paddingBottom: '100%' }}>
-            <img src={p.image} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
-            {discount > 0 && <span className="absolute top-3 left-3 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
-          </div>
-
-          <div className="mt-2 md:mt-3 flex gap-2 overflow-x-auto scrollbar-hide mx-0 px-0 md:mx-0 md:px-0 md:grid md:grid-cols-4">
-            {Array(4).fill(0).map((_, i) => (
-              <div key={i} className="shrink-0 w-16 h-16 md:w-24 md:h-24 aspect-square bg-slate-50 rounded-xl border border-slate-200 overflow-hidden hover:border-teal-400 cursor-pointer">
-                <img src={p.image} alt="" className="w-full h-full object-cover" />
-              </div>
-            ))}
-          </div>
+      {/* ===== MOBILE LAYOUT (1mg style — image card → info below) ===== */}
+      <div className="md:hidden">
+        {/* Hero image card — like 1mg: centered product in a light card */}
+        <div className="relative mx-3 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden" style={{ height: '55vw', maxHeight: '300px' }}>
+          <img
+            src={p.image}
+            alt={p.name}
+            className="max-w-[70%] max-h-[85%] object-contain"
+          />
+          {discount > 0 && <span className="absolute top-3 left-3 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
         </div>
 
-        <div>
-          <div className="text-xs font-bold uppercase tracking-wider text-teal-700 mb-1">{p.brand}</div>
-          <h1 className="text-xl md:text-3xl font-black text-slate-900 leading-tight tracking-tight">{p.name}</h1>
-          <div className="text-xs md:text-sm text-slate-500 mt-0.5">{p.packSize} · by {p.manufacturer}</div>
+        {/* Thumbnail strip */}
+        <div className="mt-2 px-3 flex gap-2 overflow-x-auto scrollbar-hide">
+          {Array(4).fill(0).map((_, i) => (
+            <div key={i} className="shrink-0 w-14 h-14 bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+              <img src={p.image} alt="" className="w-full h-full object-cover" />
+            </div>
+          ))}
+        </div>
 
-          <div className="flex items-center gap-3 mt-3">
-            <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-md text-sm font-bold">
-              <Star className="w-3.5 h-3.5 fill-emerald-600 stroke-emerald-600" />
+        {/* Product info */}
+        <div className="px-3 mt-4">
+          <div className="text-xs font-bold uppercase tracking-wider text-teal-700">{p.brand}</div>
+          <h1 className="text-lg font-black text-slate-900 leading-snug mt-0.5">{p.name}</h1>
+          <div className="text-xs text-slate-500 mt-0.5">{p.packSize} · by {p.manufacturer}</div>
+
+          <div className="flex items-center gap-2.5 mt-2.5">
+            <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-xs font-bold">
+              <Star className="w-3 h-3 fill-emerald-600 stroke-emerald-600" />
               {p.rating}
             </div>
-            <span className="text-sm text-slate-500">{p.ratingCount.toLocaleString('en-IN')} ratings</span>
-            {p.tags?.[0] && <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-1 rounded-md">{p.tags[0]}</span>}
+            <span className="text-xs text-slate-500">{p.ratingCount.toLocaleString('en-IN')} ratings</span>
+            {p.tags?.[0] && <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">{p.tags[0]}</span>}
           </div>
 
-          <div className="mt-4 md:mt-6 p-4 md:p-5 bg-slate-50 border border-slate-200 rounded-2xl">
-            <div className="flex items-baseline gap-3">
-              <div className="text-2xl md:text-4xl font-black text-slate-900">₹{p.price}</div>
-              {p.mrp > p.price && (<><div className="text-base text-slate-400 line-through">MRP ₹{p.mrp}</div><div className="text-sm font-bold text-emerald-600">{discount}% off</div></>)}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">Inclusive of all taxes</div>
-            {p.stock > 0 ? (
-              <div className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700"><Check className="w-4 h-4" /> In Stock · Ships in 24 hours</div>
-            ) : (
-              <div className="mt-3 text-sm font-semibold text-rose-600">Currently out of stock</div>
-            )}
+          {/* Price */}
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl font-black text-slate-900">₹{p.price}</span>
+            {p.mrp > p.price && (<><span className="text-sm text-slate-400 line-through">₹{p.mrp}</span><span className="text-xs font-bold text-emerald-600">{discount}% off</span></>)}
           </div>
+          <div className="text-[11px] text-slate-500">Inclusive of all taxes</div>
+          {p.stock > 0 ? (
+            <div className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><Check className="w-3.5 h-3.5" /> In Stock</div>
+          ) : (
+            <div className="mt-1.5 text-xs font-semibold text-rose-600">Out of stock</div>
+          )}
 
           {p.prescription && (
-            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
-              <FileText className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
+              <FileText className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <div className="text-sm font-bold text-amber-800">Prescription Required</div>
-                <div className="text-xs text-amber-700 mt-0.5">This medicine requires a valid prescription. <Link href="/prescription" className="font-bold underline">Upload yours now</Link> and our pharmacist will review it.</div>
+                <div className="text-xs font-bold text-amber-800">Prescription Required</div>
+                <div className="text-[11px] text-amber-700 mt-0.5">Upload a valid prescription. <Link href="/prescription" className="font-bold underline">Upload now</Link></div>
               </div>
             </div>
           )}
 
-          <div className="mt-6 hidden md:flex items-center gap-3">
-            <div className="inline-flex items-center border border-slate-300 rounded-full overflow-hidden">
-              <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-10 h-11 hover:bg-slate-50"><Minus className="w-4 h-4 mx-auto" /></button>
-              <span className="w-10 text-center font-bold">{qty}</span>
-              <button onClick={() => setQty(q => q + 1)} className="w-10 h-11 hover:bg-slate-50"><Plus className="w-4 h-4 mx-auto" /></button>
-            </div>
-            <Button onClick={handleAdd} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white h-12 rounded-full font-bold shadow-lift"><ShoppingCart className="w-4 h-4 mr-2" /> {inCart ? 'Update Cart' : 'Add to Cart'}</Button>
-            <Button variant="outline" className="h-12 w-12 rounded-full p-0"><Heart className="w-4 h-4" /></Button>
-          </div>
-
-          <div className="mt-4 md:mt-6 grid grid-cols-3 gap-2 md:gap-3">
+          {/* Trust badges */}
+          <div className="mt-4 grid grid-cols-3 gap-2">
             {[
               { icon: Truck, t: 'Free delivery', s: 'Above ₹499' },
               { icon: ShieldCheck, t: 'Authentic', s: '100% verified' },
               { icon: BadgePercent, t: 'Easy returns', s: '7-day policy' },
             ].map((f, i) => (
-              <div key={i} className="text-center p-3 bg-white rounded-xl border border-slate-200">
-                <f.icon className="w-5 h-5 mx-auto text-teal-700 mb-1" />
-                <div className="text-xs font-bold text-slate-900">{f.t}</div>
-                <div className="text-[10px] text-slate-500">{f.s}</div>
+              <div key={i} className="text-center p-2 bg-slate-50 rounded-lg border border-slate-100">
+                <f.icon className="w-4 h-4 mx-auto text-teal-700 mb-0.5" />
+                <div className="text-[10px] font-bold text-slate-900 leading-tight">{f.t}</div>
+                <div className="text-[9px] text-slate-500">{f.s}</div>
               </div>
             ))}
           </div>
 
-          <div className="mt-5 md:mt-8">
-            <h3 className="font-bold text-slate-900 mb-1.5 md:mb-2 text-sm md:text-base">Product Information</h3>
-            <p className="text-xs md:text-sm text-slate-600 leading-relaxed">{p.description}</p>
+          {/* Description */}
+          <div className="mt-4">
+            <h3 className="font-bold text-slate-900 mb-1 text-sm">Product Information</h3>
+            <p className="text-xs text-slate-600 leading-relaxed">{p.description}</p>
           </div>
 
-          <div className="mt-4 md:mt-6 grid grid-cols-2 gap-2 md:gap-3 text-xs md:text-sm">
+          {/* Specs */}
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
             <Row k="Brand" v={p.brand} />
             <Row k="Manufacturer" v={p.manufacturer} />
             <Row k="Pack size" v={p.packSize} />
@@ -154,29 +141,122 @@ const PDP = () => {
         </div>
       </div>
 
+      {/* ===== DESKTOP LAYOUT (2-column) ===== */}
+      <div className="hidden md:block container max-w-7xl mx-auto px-4">
+        <div className="grid md:grid-cols-2 gap-12">
+          <div>
+            <div className="relative bg-slate-50 rounded-3xl overflow-hidden border border-slate-100 mx-auto w-full" style={{ paddingBottom: '100%' }}>
+              <img src={p.image} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
+              {discount > 0 && <span className="absolute top-3 left-3 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
+            </div>
+            <div className="mt-3 grid grid-cols-4 gap-2">
+              {Array(4).fill(0).map((_, i) => (
+                <div key={i} className="aspect-square bg-slate-50 rounded-xl border border-slate-200 overflow-hidden hover:border-teal-400 cursor-pointer">
+                  <img src={p.image} alt="" className="w-full h-full object-cover" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-xs font-bold uppercase tracking-wider text-teal-700 mb-1">{p.brand}</div>
+            <h1 className="text-3xl font-black text-slate-900 leading-tight tracking-tight">{p.name}</h1>
+            <div className="text-sm text-slate-500 mt-1">{p.packSize} · by {p.manufacturer}</div>
+
+            <div className="flex items-center gap-3 mt-3">
+              <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-md text-sm font-bold">
+                <Star className="w-3.5 h-3.5 fill-emerald-600 stroke-emerald-600" />
+                {p.rating}
+              </div>
+              <span className="text-sm text-slate-500">{p.ratingCount.toLocaleString('en-IN')} ratings</span>
+              {p.tags?.[0] && <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-1 rounded-md">{p.tags[0]}</span>}
+            </div>
+
+            <div className="mt-6 p-5 bg-slate-50 border border-slate-200 rounded-2xl">
+              <div className="flex items-baseline gap-3">
+                <div className="text-4xl font-black text-slate-900">₹{p.price}</div>
+                {p.mrp > p.price && (<><div className="text-base text-slate-400 line-through">MRP ₹{p.mrp}</div><div className="text-sm font-bold text-emerald-600">{discount}% off</div></>)}
+              </div>
+              <div className="text-xs text-slate-500 mt-1">Inclusive of all taxes</div>
+              {p.stock > 0 ? (
+                <div className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700"><Check className="w-4 h-4" /> In Stock · Ships in 24 hours</div>
+              ) : (
+                <div className="mt-3 text-sm font-semibold text-rose-600">Currently out of stock</div>
+              )}
+            </div>
+
+            {p.prescription && (
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
+                <FileText className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-sm font-bold text-amber-800">Prescription Required</div>
+                  <div className="text-xs text-amber-700 mt-0.5">This medicine requires a valid prescription. <Link href="/prescription" className="font-bold underline">Upload yours now</Link> and our pharmacist will review it.</div>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6 flex items-center gap-3">
+              <div className="inline-flex items-center border border-slate-300 rounded-full overflow-hidden">
+                <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-10 h-11 hover:bg-slate-50"><Minus className="w-4 h-4 mx-auto" /></button>
+                <span className="w-10 text-center font-bold">{qty}</span>
+                <button onClick={() => setQty(q => q + 1)} className="w-10 h-11 hover:bg-slate-50"><Plus className="w-4 h-4 mx-auto" /></button>
+              </div>
+              <Button onClick={handleAdd} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white h-12 rounded-full font-bold shadow-lift"><ShoppingCart className="w-4 h-4 mr-2" /> {inCart ? 'Update Cart' : 'Add to Cart'}</Button>
+              <Button variant="outline" className="h-12 w-12 rounded-full p-0"><Heart className="w-4 h-4" /></Button>
+            </div>
+
+            <div className="mt-6 grid grid-cols-3 gap-3">
+              {[
+                { icon: Truck, t: 'Free delivery', s: 'Above ₹499' },
+                { icon: ShieldCheck, t: 'Authentic', s: '100% verified' },
+                { icon: BadgePercent, t: 'Easy returns', s: '7-day policy' },
+              ].map((f, i) => (
+                <div key={i} className="text-center p-3 bg-white rounded-xl border border-slate-200">
+                  <f.icon className="w-5 h-5 mx-auto text-teal-700 mb-1" />
+                  <div className="text-xs font-bold text-slate-900">{f.t}</div>
+                  <div className="text-[10px] text-slate-500">{f.s}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8">
+              <h3 className="font-bold text-slate-900 mb-2">Product Information</h3>
+              <p className="text-sm text-slate-600 leading-relaxed">{p.description}</p>
+            </div>
+
+            <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
+              <Row k="Brand" v={p.brand} />
+              <Row k="Manufacturer" v={p.manufacturer} />
+              <Row k="Pack size" v={p.packSize} />
+              <Row k="Prescription" v={p.prescription ? 'Required' : 'Not required'} />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Related */}
       {data.related?.length > 0 && (
-        <section className="container max-w-7xl mx-auto px-4 py-12">
-          <h2 className="text-xl md:text-2xl font-black text-slate-900 mb-5">You may also like</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
+        <section className="container max-w-7xl mx-auto px-3 md:px-4 py-8 md:py-12">
+          <h2 className="text-lg md:text-2xl font-black text-slate-900 mb-4">You may also like</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-2 md:gap-4">
             {data.related.slice(0, 5).map(rp => <ProductCard key={rp.id} product={rp} />)}
           </div>
         </section>
       )}
 
       {/* Sticky add-to-cart bar mobile */}
-      <div className="md:hidden fixed bottom-16 left-0 right-0 z-30 bg-white border-t border-slate-200 p-3 shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.08)]">
+      <div className="md:hidden fixed bottom-16 left-0 right-0 z-30 bg-white border-t border-slate-200 px-3 py-2.5 shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.08)]">
         <div className="flex items-center gap-3">
           <div>
             <div className="text-lg font-black text-slate-900 leading-none">₹{p.price}</div>
-            {p.mrp > p.price && <div className="text-xs text-slate-400 line-through">₹{p.mrp}</div>}
+            {p.mrp > p.price && <div className="text-[10px] text-slate-400 line-through">₹{p.mrp}</div>}
           </div>
           <div className="inline-flex items-center border border-slate-300 rounded-full overflow-hidden">
-            <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-9 h-10"><Minus className="w-4 h-4 mx-auto" /></button>
-            <span className="w-7 text-center text-sm font-bold">{qty}</span>
-            <button onClick={() => setQty(q => q + 1)} className="w-9 h-10"><Plus className="w-4 h-4 mx-auto" /></button>
+            <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-8 h-9"><Minus className="w-3.5 h-3.5 mx-auto" /></button>
+            <span className="w-6 text-center text-sm font-bold">{qty}</span>
+            <button onClick={() => setQty(q => q + 1)} className="w-8 h-9"><Plus className="w-3.5 h-3.5 mx-auto" /></button>
           </div>
-          <Button onClick={handleAdd} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white h-11 rounded-full font-bold">Add to Cart</Button>
+          <Button onClick={handleAdd} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white h-10 rounded-full font-bold text-sm">Add to Cart</Button>
         </div>
       </div>
     </div>
