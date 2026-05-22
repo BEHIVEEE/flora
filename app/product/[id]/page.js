@@ -40,7 +40,7 @@ const PDP = () => {
   };
 
   return (
-    <div className="bg-white pb-36 md:pb-0">
+    <div className="bg-white pb-48 md:pb-0">
       <div className="container max-w-7xl mx-auto px-3 md:px-4 py-3 md:py-4">
         <div className="text-[11px] text-slate-500 flex items-center gap-1 flex-wrap">
           <Link href="/" className="hover:text-teal-700">Home</Link>
@@ -53,11 +53,22 @@ const PDP = () => {
 
       <div className="container max-w-7xl mx-auto px-3 md:px-4 grid md:grid-cols-2 gap-5 md:gap-12">
         <div>
-          <div className="relative bg-slate-50 rounded-2xl md:rounded-3xl overflow-hidden border border-slate-100 mx-auto w-full max-w-[360px] md:max-w-none h-[200px] sm:h-[260px] md:h-auto" style={{}}>
-            <div className="hidden md:block" style={{ paddingBottom: '100%' }} />
+          {/* Mobile: show the ENTIRE product photo (no cropping) */}
+          <div className="md:hidden relative mx-auto w-full max-w-[360px]">
+            <img 
+              src={p.image} 
+              alt={p.name} 
+              className="w-full h-auto max-h-[220px] object-contain bg-slate-50 rounded-2xl border border-slate-100" 
+            />
+            {discount > 0 && <span className="absolute top-3 left-3 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
+          </div>
+
+          {/* Desktop: square cover */}
+          <div className="hidden md:block relative bg-slate-50 rounded-3xl overflow-hidden border border-slate-100 mx-auto w-full md:max-w-none" style={{ paddingBottom: '100%' }}>
             <img src={p.image} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
             {discount > 0 && <span className="absolute top-3 left-3 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
           </div>
+
           <div className="mt-3 flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 md:mx-0 md:px-0 md:grid md:grid-cols-4">
             {Array(4).fill(0).map((_, i) => (
               <div key={i} className="shrink-0 w-24 h-24 md:w-auto md:h-auto aspect-square bg-slate-50 rounded-xl border border-slate-200 overflow-hidden hover:border-teal-400 cursor-pointer">
