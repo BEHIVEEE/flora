@@ -40,9 +40,9 @@ const PDP = () => {
   };
 
   return (
-    <div className="bg-white pb-28 md:pb-0">
-      <div className="container max-w-7xl mx-auto px-4 py-4">
-        <div className="text-xs text-slate-500 flex items-center gap-1 flex-wrap">
+    <div className="bg-white pb-36 md:pb-0">
+      <div className="container max-w-7xl mx-auto px-3 md:px-4 py-3 md:py-4">
+        <div className="text-[11px] text-slate-500 flex items-center gap-1 flex-wrap">
           <Link href="/" className="hover:text-teal-700">Home</Link>
           <ChevronRight className="w-3 h-3" />
           <Link href={`/products?category=${p.category}`} className="hover:text-teal-700 capitalize">{p.category.replace('-', ' ')}</Link>
@@ -51,9 +51,9 @@ const PDP = () => {
         </div>
       </div>
 
-      <div className="container max-w-7xl mx-auto px-4 grid md:grid-cols-2 gap-8 md:gap-12">
+      <div className="container max-w-7xl mx-auto px-3 md:px-4 grid md:grid-cols-2 gap-5 md:gap-12">
         <div>
-          <div className="relative bg-slate-50 rounded-2xl md:rounded-3xl overflow-hidden border border-slate-100 mx-auto w-full md:max-w-none h-[260px] sm:h-[320px] md:h-auto" style={{}}>
+          <div className="relative bg-slate-50 rounded-2xl md:rounded-3xl overflow-hidden border border-slate-100 mx-auto w-full max-w-[360px] md:max-w-none h-[200px] sm:h-[260px] md:h-auto" style={{}}>
             <div className="hidden md:block" style={{ paddingBottom: '100%' }} />
             <img src={p.image} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
             {discount > 0 && <span className="absolute top-3 left-3 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
@@ -69,8 +69,8 @@ const PDP = () => {
 
         <div>
           <div className="text-xs font-bold uppercase tracking-wider text-teal-700 mb-1">{p.brand}</div>
-          <h1 className="text-2xl md:text-3xl font-black text-slate-900 leading-tight tracking-tight">{p.name}</h1>
-          <div className="text-sm text-slate-500 mt-1">{p.packSize} · by {p.manufacturer}</div>
+          <h1 className="text-xl md:text-3xl font-black text-slate-900 leading-tight tracking-tight">{p.name}</h1>
+          <div className="text-xs md:text-sm text-slate-500 mt-0.5">{p.packSize} · by {p.manufacturer}</div>
 
           <div className="flex items-center gap-3 mt-3">
             <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-md text-sm font-bold">
@@ -81,9 +81,9 @@ const PDP = () => {
             {p.tags?.[0] && <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-1 rounded-md">{p.tags[0]}</span>}
           </div>
 
-          <div className="mt-6 p-5 bg-slate-50 border border-slate-200 rounded-2xl">
+          <div className="mt-4 md:mt-6 p-4 md:p-5 bg-slate-50 border border-slate-200 rounded-2xl">
             <div className="flex items-baseline gap-3">
-              <div className="text-3xl md:text-4xl font-black text-slate-900">₹{p.price}</div>
+              <div className="text-2xl md:text-4xl font-black text-slate-900">₹{p.price}</div>
               {p.mrp > p.price && (<><div className="text-base text-slate-400 line-through">MRP ₹{p.mrp}</div><div className="text-sm font-bold text-emerald-600">{discount}% off</div></>)}
             </div>
             <div className="text-xs text-slate-500 mt-1">Inclusive of all taxes</div>
@@ -114,7 +114,7 @@ const PDP = () => {
             <Button variant="outline" className="h-12 w-12 rounded-full p-0"><Heart className="w-4 h-4" /></Button>
           </div>
 
-          <div className="mt-6 grid grid-cols-3 gap-3">
+          <div className="mt-4 md:mt-6 grid grid-cols-3 gap-2 md:gap-3">
             {[
               { icon: Truck, t: 'Free delivery', s: 'Above ₹499' },
               { icon: ShieldCheck, t: 'Authentic', s: '100% verified' },
@@ -128,12 +128,12 @@ const PDP = () => {
             ))}
           </div>
 
-          <div className="mt-8">
-            <h3 className="font-bold text-slate-900 mb-2">Product Information</h3>
-            <p className="text-sm text-slate-600 leading-relaxed">{p.description}</p>
+          <div className="mt-5 md:mt-8">
+            <h3 className="font-bold text-slate-900 mb-1.5 md:mb-2 text-sm md:text-base">Product Information</h3>
+            <p className="text-xs md:text-sm text-slate-600 leading-relaxed">{p.description}</p>
           </div>
 
-          <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
+          <div className="mt-4 md:mt-6 grid grid-cols-2 gap-2 md:gap-3 text-xs md:text-sm">
             <Row k="Brand" v={p.brand} />
             <Row k="Manufacturer" v={p.manufacturer} />
             <Row k="Pack size" v={p.packSize} />
@@ -172,9 +172,9 @@ const PDP = () => {
 };
 
 const Row = ({ k, v }) => (
-  <div className="flex flex-col p-3 bg-slate-50 rounded-xl border border-slate-100">
-    <span className="text-xs text-slate-500">{k}</span>
-    <span className="font-semibold text-slate-900 text-sm mt-0.5">{v}</span>
+  <div className="flex flex-col p-2.5 md:p-3 bg-slate-50 rounded-xl border border-slate-100">
+    <span className="text-[11px] md:text-xs text-slate-500">{k}</span>
+    <span className="font-semibold text-slate-900 text-xs md:text-sm mt-0.5">{v}</span>
   </div>
 );
 
