@@ -53,9 +53,10 @@ const PDP = () => {
 
       <div className="container max-w-7xl mx-auto px-4 grid md:grid-cols-2 gap-8 md:gap-12">
         <div>
-          <div className="relative bg-slate-50 rounded-3xl overflow-hidden border border-slate-100 mx-auto w-full max-w-[420px] md:max-w-none" style={{ paddingBottom: '100%', maxHeight: '55vh' }}>
-            <img src={p.image} alt={p.name} className="absolute inset-0 w-full h-full object-contain md:object-cover" />
-            {discount > 0 && <span className="absolute top-4 left-4 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
+          <div className="relative bg-slate-50 rounded-2xl md:rounded-3xl overflow-hidden border border-slate-100 mx-auto w-full md:max-w-none h-[260px] sm:h-[320px] md:h-auto" style={{}}>
+            <div className="hidden md:block" style={{ paddingBottom: '100%' }} />
+            <img src={p.image} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
+            {discount > 0 && <span className="absolute top-3 left-3 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
           </div>
           <div className="mt-3 flex gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1 md:mx-0 md:px-0 md:grid md:grid-cols-4">
             {Array(4).fill(0).map((_, i) => (
