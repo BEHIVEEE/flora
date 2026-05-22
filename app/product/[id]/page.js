@@ -53,15 +53,15 @@ const PDP = () => {
 
       <div className="container max-w-7xl mx-auto px-3 md:px-4 grid md:grid-cols-2 gap-5 md:gap-12">
         <div>
-          {/* Mobile: tiny hero — FULL photo visible, page fully usable */}
-          <div className="md:hidden relative mx-auto w-full max-w-[240px]">
+          {/* Mobile: minimal hero — FULL photo visible, page fully usable */}
+          <div className="md:hidden relative mx-auto w-full max-w-[200px]">
             <img 
               src={p.image} 
               alt={p.name} 
-              className="w-full h-auto object-contain bg-slate-50 rounded-2xl border border-slate-100" 
-              style={{ maxHeight: '90px' }}
+              className="w-full h-auto object-contain bg-slate-50 rounded-xl border border-slate-100" 
+              style={{ maxHeight: '60px' }}
             />
-            {discount > 0 && <span className="absolute top-3 left-3 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
+            {discount > 0 && <span className="absolute -top-1 -left-1 bg-rose-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">{discount}% OFF</span>}
           </div>
 
           {/* Desktop: square cover */}
