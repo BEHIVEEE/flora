@@ -24,9 +24,23 @@ const RxDetail = () => {
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
 
-  const loadRx = () => fetch(`/api/prescriptions/${id}`).then(r => r.json()).then(d => setRx(d.prescription));
+  const [fileUrl, setFileUrl] = useState(null);
+  const tokenHeader = () => {
+    const t = typeof window !== 'undefined' ? localStorage.getItem('cs_token') : null;
+    return t ? { Authorization: 'Bearer ' + t } : {};
+  };
+  const loadRx = () => fetch(`/api/prescriptions/${id}`, { headers: tokenHeader() }).then(r => r.json()).then(d => setRx(d.prescription));
   const loadMsgs = () => fetch(`/api/prescriptions/${id}/messages`).then(r => r.json()).then(d => setMessages(d.messages || []));
-  useEffect(() => { loadRx(); loadMsgs(); const t = setInterval(loadMsgs, 4000); return () => clearInterval(t); }, [id]);
+  const loadFile = async () => {
+    try {
+      const res = await fetch(`/api/prescriptions/${id}/file`, { headers: tokenHeader() });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      setFileUrl(URL.createObjectURL(blob));
+    } catch {}
+  };
+  useEffect(() => { loadRx(); loadMsgs(); loadFile(); const t = setInterval(loadMsgs, 4000); return () => clearInterval(t); }, [id]);
+  useEffect(() => () => { if (fileUrl) URL.revokeObjectURL(fileUrl); }, [fileUrl]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages.length]);
 
   const send = async () => {
@@ -68,13 +82,13 @@ const RxDetail = () => {
           <div className="bg-white border border-slate-200 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-bold text-slate-900">Prescription File</h3>
-              {rx.fileDataUrl && <a href={rx.fileDataUrl} download={rx.fileName || `${rx.id}.png`}><Button size="sm" variant="outline" className="rounded-full"><Download className="w-3.5 h-3.5 mr-1" /> Download</Button></a>}
+              {fileUrl && <a href={`/api/prescriptions/${id}/file?download=1`}><Button size="sm" variant="outline" className="rounded-full"><Download className="w-3.5 h-3.5 mr-1" /> Download</Button></a>}
             </div>
-            {rx.fileDataUrl ? (
-              rx.fileDataUrl.startsWith('data:application/pdf') ? (
-                <embed src={rx.fileDataUrl} type="application/pdf" className="w-full h-[480px] rounded-xl border border-slate-200" />
+            {fileUrl ? (
+              rx.mimeType === 'application/pdf' ? (
+                <embed src={fileUrl} type="application/pdf" className="w-full h-[480px] rounded-xl border border-slate-200" />
               ) : (
-                <img src={rx.fileDataUrl} alt="Prescription" className="w-full max-h-[600px] object-contain rounded-xl border border-slate-200 bg-slate-50" />
+                <img src={fileUrl} alt="Prescription" className="w-full max-h-[600px] object-contain rounded-xl border border-slate-200 bg-slate-50" />
               )
             ) : (
               <div className="text-sm text-slate-500 p-6 bg-slate-50 rounded-xl text-center">No file attached</div>

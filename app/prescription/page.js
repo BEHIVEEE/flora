@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Upload, FileText, ShieldCheck, Clock, CheckCircle2, X, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,41 +10,76 @@ import { Textarea } from '@/components/ui/textarea';
 import { useCart } from '@/components/CartProvider';
 import { toast } from 'sonner';
 
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+const MAX_SIZE = 5 * 1024 * 1024;
+
 const PrescriptionPage = () => {
+  const router = useRouter();
   const { userId } = useCart() || {};
   const fileRef = useRef(null);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState('');
-  const [form, setForm] = useState({ patientName: '', phone: '', notes: '' });
+  const [form, setForm] = useState({ patientName: '', phone: '', notes: '', orderId: '' });
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(null);
 
   const handleFile = (f) => {
     if (!f) return;
-    if (f.size > 5 * 1024 * 1024) { toast.error('File too large (max 5MB)'); return; }
+    if (!ALLOWED_TYPES.includes(f.type)) {
+      toast.error('Only JPG, PNG or PDF files are allowed');
+      return;
+    }
+    if (f.size > MAX_SIZE) {
+      toast.error('File too large (max 5MB)');
+      return;
+    }
     setFile(f);
-    const reader = new FileReader();
-    reader.onload = e => setPreview(e.target.result);
-    reader.readAsDataURL(f);
+    if (f.type === 'application/pdf') {
+      setPreview('pdf');
+    } else {
+      const reader = new FileReader();
+      reader.onload = e => setPreview(e.target.result);
+      reader.readAsDataURL(f);
+    }
   };
 
   const submit = async () => {
     if (!file) { toast.error('Please upload a prescription'); return; }
-    if (!form.patientName || !form.phone) { toast.error('Please fill patient name and phone'); return; }
+    if (!form.patientName || form.phone.length !== 10) {
+      toast.error('Please fill patient name and a valid 10-digit phone');
+      return;
+    }
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('cs_token') : null;
+    if (!token) {
+      toast.error('Please sign in to upload a prescription');
+      router.push('/login?next=/prescription');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const res = await fetch('/api/prescriptions', {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('patientName', form.patientName);
+      fd.append('phone', form.phone);
+      fd.append('notes', form.notes || '');
+      if (form.orderId) fd.append('orderId', form.orderId);
+
+      const res = await fetch('/api/prescriptions/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, ...form, fileName: file.name, fileDataUrl: preview }),
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
       });
       const data = await res.json();
-      if (data.prescription) {
+      if (res.ok && data.ok && data.prescription) {
         setDone(data.prescription);
-        toast.success('Prescription uploaded! Our pharmacist will contact you shortly.');
+        toast.success('Prescription uploaded! Our pharmacist will review it shortly.');
       } else {
         toast.error(data.error || 'Failed to upload');
       }
+    } catch (e) {
+      toast.error('Upload failed. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -90,9 +126,17 @@ const PrescriptionPage = () => {
                 </div>
               ) : (
                 <div className="relative inline-block">
-                  <img src={preview} alt="Preview" className="max-h-80 rounded-2xl border border-slate-200" />
+                  {preview === 'pdf' ? (
+                    <div className="w-64 h-80 rounded-2xl border border-slate-200 bg-slate-50 flex flex-col items-center justify-center p-4">
+                      <FileText className="w-16 h-16 text-rose-500 mb-3" />
+                      <div className="text-sm font-semibold text-slate-700">PDF Document</div>
+                      <div className="text-xs text-slate-500 mt-1 text-center break-all">{file?.name}</div>
+                    </div>
+                  ) : (
+                    <img src={preview} alt="Preview" className="max-h-80 rounded-2xl border border-slate-200" />
+                  )}
                   <button onClick={() => { setFile(null); setPreview(''); }} className="absolute -top-2 -right-2 bg-rose-500 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lift"><X className="w-4 h-4" /></button>
-                  <div className="text-sm text-slate-600 mt-2">{file?.name}</div>
+                  {preview !== 'pdf' && <div className="text-sm text-slate-600 mt-2">{file?.name}</div>}
                 </div>
               )}
               <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={e => handleFile(e.target.files?.[0])} />

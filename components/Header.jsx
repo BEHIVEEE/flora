@@ -79,7 +79,7 @@ const Header = () => {
                 )}
               </span>
             ) : (
-              <button onClick={detect} className="flex items-center gap-1 hover:underline"><MapPin className="w-3 h-3" /> Select delivery location</button>
+              <button onClick={detect} suppressHydrationWarning className="flex items-center gap-1 hover:underline"><MapPin className="w-3 h-3" /> Select delivery location</button>
             )}
             <span className="opacity-80">Free delivery on orders above ₹{freeDeliveryAbove}</span>
           </div>

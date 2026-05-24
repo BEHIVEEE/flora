@@ -90,3 +90,9 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# Firebase service account (sensitive)
+firebase-service-account.json
+
+# Uploaded prescription files (user data)
+/prescriptions/

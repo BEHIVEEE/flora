@@ -1,3 +1,4 @@
+
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongo';
 import { PRODUCTS, CATEGORIES } from '@/lib/seed-data';
@@ -6,6 +7,22 @@ import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import { z } from 'zod';
 import { hashPassword, signToken, verifyToken, getBearer } from '@/lib/auth';
+import {
+  handleGoogleCallback,
+  handleGoogleAuth,
+  handleSendOTP,
+  handleVerifyOTP,
+  handleVerifyFirebaseOTP,
+  handleLinkAccount,
+} from '@/lib/auth-routes.js';
+import fs from 'fs';
+import {
+  validateAndReadFile,
+  savePrescriptionFile,
+  resolveStoredPath,
+  mimeTypeFor,
+  MAX_FILE_SIZE,
+} from '@/lib/prescription-storage.js';
 
 // In-memory rate limiter (per IP)
 const rateMap = new Map();
@@ -55,6 +72,27 @@ async function seedOnce() {
     await ensureSeed(db);
     seeded = true;
   } catch (e) { console.error('Seed error', e); }
+}
+
+async function requireAuth(req, db) {
+  const token = getBearer(req);
+  const data = verifyToken(token);
+  if (!data) return { error: json({ ok: false, error: 'Authentication required' }, 401) };
+  const user = await db.collection('users').findOne({ id: data.uid }, { projection: { _id: 0, hash: 0, salt: 0 } });
+  if (!user) return { error: json({ ok: false, error: 'User not found' }, 401) };
+  return { user };
+}
+
+async function rxAuditLog(db, { action, prescriptionId, userId, role, ip, meta }) {
+  try {
+    await db.collection('rx_audit').insertOne({
+      id: 'rxa-' + uuidv4().slice(0, 12),
+      action, prescriptionId: prescriptionId || null,
+      userId: userId || null, role: role || null,
+      ip: ip || null, meta: meta || null,
+      createdAt: new Date().toISOString(),
+    });
+  } catch (e) { /* best-effort */ }
 }
 
 async function requireAdmin(req, db) {
@@ -266,6 +304,20 @@ export async function GET(req, { params }) {
       const user = await db.collection('users').findOne({ id: data.uid }, { projection: { _id: 0, hash: 0, salt: 0 } });
       if (!user) return json({ ok: false }, 401);
       return json({ ok: true, user });
+    }
+
+    // ============================================
+    // NEW: Google OAuth - Get Auth URL
+    // ============================================
+    if (path === 'auth/google') {
+      return handleGoogleAuth(json);
+    }
+
+    // ============================================
+    // NEW: Google OAuth Callback (GET)
+    // ============================================
+    if (path === 'auth/google/callback') {
+      return await handleGoogleCallback(req, db, json);
     }
 
     if (path === 'settings') {
@@ -559,9 +611,102 @@ export async function GET(req, { params }) {
       const messages = await db.collection('chat_messages').find({ threadId: id }, { projection: { _id: 0 } }).sort({ createdAt: 1 }).toArray();
       return json({ thread, messages });
     }
+    // Admin: list prescriptions (with optional status/search)
+    if (path === 'admin/prescriptions') {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const status = searchParams.get('status');
+      const search = searchParams.get('search');
+      const filter = {};
+      if (status && status !== 'all') filter.status = status;
+      if (search) {
+        const re = { $regex: search, $options: 'i' };
+        filter.$or = [{ id: re }, { patientName: re }, { phone: re }];
+      }
+      const prescriptions = await db.collection('prescriptions')
+        .find(filter, { projection: { _id: 0, fileDataUrl: 0, sha256: 0 } })
+        .sort({ createdAt: -1 }).limit(500).toArray();
+      return json({ prescriptions });
+    }
+
+    // Admin: prescription audit trail
+    if (path.startsWith('admin/prescriptions/') && path.endsWith('/audit')) {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const id = path.split('/')[2];
+      const logs = await db.collection('rx_audit').find({ prescriptionId: id }, { projection: { _id: 0 } }).sort({ createdAt: -1 }).limit(200).toArray();
+      return json({ logs });
+    }
+
+    // Protected file download — owner or admin only
+    if (path.startsWith('prescriptions/') && path.endsWith('/file')) {
+      const id = path.split('/')[1];
+      const auth = await requireAuth(req, db);
+      if (auth.error) return auth.error;
+
+      const rx = await db.collection('prescriptions').findOne({ id });
+      if (!rx) return json({ error: 'Not found' }, 404);
+
+      const isOwner = rx.userId === auth.user.id;
+      const isAdmin = auth.user.role === 'admin';
+      if (!isOwner && !isAdmin) {
+        await rxAuditLog(db, { action: 'file.denied', prescriptionId: id, userId: auth.user.id, role: auth.user.role, ip: getClientIp(req) });
+        return json({ error: 'Forbidden' }, 403);
+      }
+
+      // Legacy records may have only fileDataUrl (base64). Serve those directly.
+      if (!rx.filePath && rx.fileDataUrl) {
+        await rxAuditLog(db, { action: 'file.access.legacy', prescriptionId: id, userId: auth.user.id, role: auth.user.role, ip: getClientIp(req) });
+        const m = /^data:([^;]+);base64,(.+)$/.exec(rx.fileDataUrl);
+        if (!m) return json({ error: 'Corrupt legacy file' }, 500);
+        const buf = Buffer.from(m[2], 'base64');
+        return new NextResponse(buf, {
+          status: 200,
+          headers: { ...CORS, 'Content-Type': m[1], 'Cache-Control': 'private, no-store' },
+        });
+      }
+
+      if (!rx.filePath) return json({ error: 'File missing' }, 404);
+
+      let abs;
+      try { abs = resolveStoredPath(rx.filePath); }
+      catch { return json({ error: 'Invalid path' }, 400); }
+
+      if (!fs.existsSync(abs)) {
+        await rxAuditLog(db, { action: 'file.missing', prescriptionId: id, userId: auth.user.id, role: auth.user.role, ip: getClientIp(req) });
+        return json({ error: 'File not found on disk' }, 404);
+      }
+
+      const stat = await fs.promises.stat(abs);
+      const buf = await fs.promises.readFile(abs);
+      const mime = rx.mimeType || mimeTypeFor(abs);
+      const download = searchParams.get('download') === '1';
+
+      await rxAuditLog(db, {
+        action: download ? 'file.download' : 'file.view',
+        prescriptionId: id, userId: auth.user.id, role: auth.user.role, ip: getClientIp(req),
+        meta: { size: stat.size },
+      });
+
+      const headers = {
+        ...CORS,
+        'Content-Type': mime,
+        'Content-Length': String(stat.size),
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+      };
+      if (download) {
+        headers['Content-Disposition'] = `attachment; filename="${rx.fileName || (rx.id + '.' + (rx.mimeType?.split('/')[1] || 'bin'))}"`;
+      }
+      return new NextResponse(buf, { status: 200, headers });
+    }
+
     if (path.startsWith('prescriptions/')) {
       const id = path.replace('prescriptions/', '');
-      const prescription = await db.collection('prescriptions').findOne({ id }, { projection: { _id: 0 } });
+      const prescription = await db.collection('prescriptions').findOne(
+        { id },
+        { projection: { _id: 0, fileDataUrl: 0, sha256: 0, filePath: 0 } }
+      );
       if (!prescription) return json({ error: 'Not found' }, 404);
       return json({ prescription });
     }
@@ -631,6 +776,107 @@ export async function POST(req, { params }) {
   try {
     const db = await getDb();
     await seedOnce();
+
+    // ============================================
+    // Prescription upload (multipart/form-data) — handled BEFORE JSON parse
+    // ============================================
+    if (path === 'prescriptions/upload') {
+      // Auth required
+      const auth = await requireAuth(req, db);
+      if (auth.error) return auth.error;
+
+      // Rate limit per user
+      const rl = rateLimit(getClientIp(req), `rx-upload:${auth.user.id}`, 10, 60000);
+      if (rl.limited) return json({ ok: false, error: `Too many uploads. Try again in ${rl.retryAfter}s.` }, 429);
+
+      const ctype = req.headers.get('content-type') || '';
+      if (!ctype.includes('multipart/form-data')) {
+        return json({ ok: false, error: 'Expected multipart/form-data' }, 400);
+      }
+
+      let form;
+      try { form = await req.formData(); }
+      catch { return json({ ok: false, error: 'Invalid form data' }, 400); }
+
+      const file = form.get('file');
+      const orderId = String(form.get('orderId') || '').trim();
+      const patientName = String(form.get('patientName') || '').trim();
+      const phone = String(form.get('phone') || '').replace(/\D/g, '').slice(-10);
+      const notes = String(form.get('notes') || '').trim().slice(0, 1000);
+
+      if (!file) return json({ ok: false, error: 'File is required' }, 400);
+      if (!patientName || phone.length !== 10) return json({ ok: false, error: 'Patient name and 10-digit phone required' }, 400);
+
+      // Validate + read bytes (real MIME check, size limit)
+      let validated;
+      try { validated = await validateAndReadFile(file); }
+      catch (e) { return json({ ok: false, error: e.message }, 400); }
+
+      // Dedup by SHA-256 per user
+      const crypto2 = await import('crypto');
+      const sha = crypto2.createHash('sha256').update(validated.buffer).digest('hex');
+      const dup = await db.collection('prescriptions').findOne({ userId: auth.user.id, sha256: sha });
+      if (dup) {
+        await rxAuditLog(db, { action: 'upload.duplicate', prescriptionId: dup.id, userId: auth.user.id, role: auth.user.role, ip: getClientIp(req) });
+        return json({ ok: false, error: 'You already uploaded this exact file.', prescriptionId: dup.id }, 409);
+      }
+
+      const rxId = 'RX-' + uuidv4().slice(0, 8).toUpperCase();
+      const effectiveOrderId = orderId || rxId;
+
+      // Save to disk in /YYYY/MM/DD/orderId_userId/
+      let saved;
+      try {
+        saved = await savePrescriptionFile({
+          buffer: validated.buffer,
+          mimeType: validated.mimeType,
+          extension: validated.extension,
+          userId: auth.user.id,
+          orderId: effectiveOrderId,
+        });
+      } catch (e) {
+        console.error('Save prescription error:', e);
+        return json({ ok: false, error: 'Failed to save file' }, 500);
+      }
+
+      const rx = {
+        id: rxId,
+        userId: auth.user.id,
+        orderId: effectiveOrderId,
+        patientName,
+        phone,
+        notes,
+        filePath: saved.relativePath,           // relative to PRESCRIPTION_DIR
+        fileName: saved.fileName,
+        originalName: validated.originalName,
+        mimeType: validated.mimeType,
+        fileSize: saved.size,
+        sha256: saved.sha256,
+        status: 'Under Review',                  // pending
+        verificationStatus: 'pending',           // pending/approved/rejected
+        pharmacistId: null,
+        verificationNotes: null,
+        verifiedAt: null,
+        archived: false,
+        uploadDate: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      };
+      await db.collection('prescriptions').insertOne({ ...rx });
+
+      await rxAuditLog(db, {
+        action: 'upload',
+        prescriptionId: rxId,
+        userId: auth.user.id,
+        role: auth.user.role,
+        ip: getClientIp(req),
+        meta: { size: saved.size, mimeType: validated.mimeType, originalName: validated.originalName },
+      });
+
+      // Strip filePath/sha256 from response
+      const { filePath, sha256, ...safe } = rx;
+      return json({ ok: true, prescription: safe });
+    }
+
     const body = await req.json().catch(() => ({}));
 
     const loginSchema = z.object({ email: z.string().email(), password: z.string().min(6) });
@@ -686,6 +932,41 @@ export async function POST(req, { params }) {
       await db.collection('users').insertOne({ ...user });
       const token = signToken({ uid: id, email: emailLc, role: 'user' });
       return json({ ok: true, token, user: { id, email: emailLc, name: user.name, phone: user.phone, role: 'user' } });
+    }
+
+    // ============================================
+    // NEW: Google OAuth Callback
+    // ============================================
+    if (path === 'auth/google/callback') {
+      return await handleGoogleCallback(req, db, json);
+    }
+
+    // ============================================
+    // NEW: Send OTP to Phone
+    // ============================================
+    if (path === 'auth/send-otp') {
+      return await handleSendOTP(req, db, json, rateLimit, getClientIp, body);
+    }
+
+    // ============================================
+    // NEW: Verify OTP and Login
+    // ============================================
+    if (path === 'auth/verify-otp') {
+      return await handleVerifyOTP(req, db, json, rateLimit, getClientIp, body);
+    }
+
+    // ============================================
+    // NEW: Verify Firebase OTP (Frontend Firebase)
+    // ============================================
+    if (path === 'auth/verify-otp-firebase') {
+      return await handleVerifyFirebaseOTP(req, db, json, rateLimit, getClientIp, body);
+    }
+
+    // ============================================
+    // NEW: Link Account (requires auth)
+    // ============================================
+    if (path === 'auth/link-account') {
+      return await handleLinkAccount(req, db, json, verifyToken);
     }
 
     // Rider: create (admin only) — uses 6-digit PIN, no email/password
@@ -1030,6 +1311,40 @@ export async function PUT(req, { params }) {
       return json({ settings });
     }
 
+    // Admin verify prescription (approve/reject) — adds pharmacistId + notes
+    // PUT /api/admin/prescriptions/:id/verify  Body: { decision: 'approved'|'rejected', notes? }
+    if (path.startsWith('admin/prescriptions/') && path.endsWith('/verify')) {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const id = path.split('/')[2];
+      const decision = String(body.decision || '').toLowerCase();
+      if (!['approved', 'rejected'].includes(decision)) {
+        return json({ ok: false, error: "decision must be 'approved' or 'rejected'" }, 400);
+      }
+      const notes = String(body.notes || '').slice(0, 1000) || null;
+      const now = new Date().toISOString();
+      const update = {
+        verificationStatus: decision,
+        status: decision === 'approved' ? 'Approved' : 'Rejected',
+        pharmacistId: admin.user.id,
+        verificationNotes: notes,
+        verifiedAt: now,
+        updatedAt: now,
+      };
+      const r = await db.collection('prescriptions').updateOne({ id }, { $set: update });
+      if (r.matchedCount === 0) return json({ ok: false, error: 'Not found' }, 404);
+      const prescription = await db.collection('prescriptions').findOne(
+        { id }, { projection: { _id: 0, fileDataUrl: 0, filePath: 0, sha256: 0 } }
+      );
+      await rxAuditLog(db, {
+        action: `verify.${decision}`,
+        prescriptionId: id,
+        userId: admin.user.id, role: 'admin', ip: getClientIp(req),
+        meta: { notes },
+      });
+      return json({ ok: true, prescription });
+    }
+
     if (path.startsWith('categories/')) {
       const admin = await requireAdmin(req, db);
       if (admin.error) return admin.error;
@@ -1202,11 +1517,20 @@ export async function PATCH(req, { params }) {
     }
 
     if (path.startsWith('prescriptions/')) {
+      // Admin-only, restricted fields only (status, notes, archive flag)
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
       const id = path.replace('prescriptions/', '');
-      const update = { ...body }; delete update._id; delete update.id;
+      const allowed = ['status', 'verificationNotes', 'archived'];
+      const update = {};
+      for (const k of allowed) if (k in body) update[k] = body[k];
       update.updatedAt = new Date().toISOString();
       await db.collection('prescriptions').updateOne({ id }, { $set: update });
-      const prescription = await db.collection('prescriptions').findOne({ id }, { projection: { _id: 0, fileDataUrl: 0 } });
+      const prescription = await db.collection('prescriptions').findOne(
+        { id },
+        { projection: { _id: 0, fileDataUrl: 0, filePath: 0, sha256: 0 } }
+      );
+      await rxAuditLog(db, { action: 'patch', prescriptionId: id, userId: admin.user.id, role: 'admin', ip: getClientIp(req), meta: update });
       return json({ prescription });
     }
 
@@ -1219,6 +1543,10 @@ export async function DELETE(req, { params }) {
   const path = (p?.path || []).join('/');
   try {
     const db = await getDb();
+    // Compliance: prescriptions can never be deleted, only archived via PATCH
+    if (path.startsWith('prescriptions/')) {
+      return json({ ok: false, error: 'Prescriptions cannot be deleted. Use archive instead.' }, 403);
+    }
     if (path.startsWith('addresses/')) { await db.collection('addresses').deleteOne({ id: path.replace('addresses/', '') }); return json({ ok: true }); }
     if (path.startsWith('products/')) { await db.collection('products').deleteOne({ id: path.replace('products/', '') }); return json({ ok: true }); }
     if (path.startsWith('slots/')) { await db.collection('slots').deleteOne({ id: path.replace('slots/', '') }); return json({ ok: true }); }
