@@ -824,20 +824,8 @@ export async function POST(req, { params }) {
       const rxId = 'RX-' + uuidv4().slice(0, 8).toUpperCase();
       const effectiveOrderId = orderId || rxId;
 
-      // Save to disk in /YYYY/MM/DD/orderId_userId/
-      let saved;
-      try {
-        saved = await savePrescriptionFile({
-          buffer: validated.buffer,
-          mimeType: validated.mimeType,
-          extension: validated.extension,
-          userId: auth.user.id,
-          orderId: effectiveOrderId,
-        });
-      } catch (e) {
-        console.error('Save prescription error:', e);
-        return json({ ok: false, error: 'Failed to save file' }, 500);
-      }
+      // Store file as base64 in MongoDB (works on all deployments including serverless)
+      const fileDataUrl = `data:${validated.mimeType};base64,${validated.buffer.toString('base64')}`;
 
       const rx = {
         id: rxId,
@@ -846,12 +834,13 @@ export async function POST(req, { params }) {
         patientName,
         phone,
         notes,
-        filePath: saved.relativePath,           // relative to PRESCRIPTION_DIR
-        fileName: saved.fileName,
+        filePath: null,
+        fileName: `prescription_${rxId}.${validated.extension}`,
         originalName: validated.originalName,
         mimeType: validated.mimeType,
-        fileSize: saved.size,
-        sha256: saved.sha256,
+        fileSize: validated.size,
+        fileDataUrl,
+        sha256: sha,
         status: 'Under Review',                  // pending
         verificationStatus: 'pending',           // pending/approved/rejected
         pharmacistId: null,
@@ -869,11 +858,11 @@ export async function POST(req, { params }) {
         userId: auth.user.id,
         role: auth.user.role,
         ip: getClientIp(req),
-        meta: { size: saved.size, mimeType: validated.mimeType, originalName: validated.originalName },
+        meta: { size: validated.size, mimeType: validated.mimeType, originalName: validated.originalName },
       });
 
-      // Strip filePath/sha256 from response
-      const { filePath, sha256, ...safe } = rx;
+      // Strip filePath/sha256/fileDataUrl from response
+      const { filePath, sha256, fileDataUrl: _fd, ...safe } = rx;
       return json({ ok: true, prescription: safe });
     }
 
