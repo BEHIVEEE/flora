@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 
 const PDP = () => {
   const { id } = useParams();
-  const { addItem, items } = useCart() || { addItem: () => {}, items: [] };
+  const { addItem, items, rxApproved } = useCart() || { addItem: () => {}, items: [], rxApproved: false };
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [qty, setQty] = useState(1);
@@ -136,13 +136,23 @@ const PDP = () => {
           )}
 
           {p.prescription && (
-            <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
-              <FileText className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <div className="text-xs font-bold text-amber-800">Prescription Required</div>
-                <div className="text-[11px] text-amber-700 mt-0.5">Upload a valid prescription. <Link href="/prescription" className="font-bold underline">Upload now</Link></div>
+            rxApproved ? (
+              <div className="mt-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2">
+                <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-xs font-bold text-emerald-800">Prescription Approved</div>
+                  <div className="text-[11px] text-emerald-700 mt-0.5">Your prescription is approved. You can add this medicine to your cart.</div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
+                <FileText className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <div className="text-xs font-bold text-amber-800">Prescription Required</div>
+                  <div className="text-[11px] text-amber-700 mt-0.5">Upload a valid prescription. <Link href="/prescription" className="font-bold underline">Upload now</Link></div>
+                </div>
+              </div>
+            )
           )}
 
           {/* Trust badges */}
@@ -235,13 +245,23 @@ const PDP = () => {
             </div>
 
             {p.prescription && (
-              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
-                <FileText className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <div className="text-sm font-bold text-amber-800">Prescription Required</div>
-                  <div className="text-xs text-amber-700 mt-0.5">This medicine requires a valid prescription. <Link href="/prescription" className="font-bold underline">Upload yours now</Link> and our pharmacist will review it.</div>
+              rxApproved ? (
+                <div className="mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2.5">
+                  <Check className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-sm font-bold text-emerald-800">Prescription Approved ✓</div>
+                    <div className="text-xs text-emerald-700 mt-0.5">Your prescription has been reviewed and approved by our pharmacist. You can now add this medicine to your cart.</div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
+                  <FileText className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-sm font-bold text-amber-800">Prescription Required</div>
+                    <div className="text-xs text-amber-700 mt-0.5">This medicine requires a valid prescription. <Link href="/prescription" className="font-bold underline">Upload yours now</Link> and our pharmacist will review it.</div>
+                  </div>
+                </div>
+              )
             )}
 
             <div className="mt-6 flex items-center gap-3">
