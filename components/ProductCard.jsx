@@ -14,6 +14,10 @@ const ProductCard = ({ product, compact = false }) => {
   const handleAdd = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (product.hasVariants) {
+      window.location.href = `/product/${product.id}`;
+      return;
+    }
     addItem(product, 1);
     setAdding(true);
     toast.success(`${product.name} added to cart`, { duration: 1600 });

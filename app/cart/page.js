@@ -31,7 +31,7 @@ const CartPage = () => {
         <div className="grid lg:grid-cols-[1fr_360px] gap-6 mt-6">
           <div className="space-y-3">
             {items.map(i => (
-              <div key={i.id} className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row gap-4">
+              <div key={i.cartKey || i.id} className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row gap-4">
                 <Link href={`/product/${i.id}`} className="w-20 h-20 md:w-24 md:h-24 bg-slate-50 rounded-xl overflow-hidden shrink-0">
                   <img src={i.image} alt={i.name} className="w-full h-full object-cover" />
                 </Link>
@@ -42,13 +42,13 @@ const CartPage = () => {
                       <Link href={`/product/${i.id}`} className="font-semibold text-slate-900 leading-snug hover:text-teal-700 line-clamp-2 text-sm md:text-base">{i.name}</Link>
                       <div className="text-xs text-slate-500 mt-0.5">{i.packSize}</div>
                     </div>
-                    <button onClick={() => removeItem(i.id)} className="text-slate-400 hover:text-rose-600 p-1" aria-label="Remove"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => removeItem(i.cartKey || i.id)} className="text-slate-400 hover:text-rose-600 p-1" aria-label="Remove"><Trash2 className="w-4 h-4" /></button>
                   </div>
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
                     <div className="inline-flex items-center border border-slate-300 rounded-full self-start sm:self-auto">
-                      <button onClick={() => updateQty(i.id, i.qty - 1)} className="w-8 h-8 hover:bg-slate-50"><Minus className="w-3.5 h-3.5 mx-auto" /></button>
+                      <button onClick={() => updateQty(i.cartKey || i.id, i.qty - 1)} className="w-8 h-8 hover:bg-slate-50"><Minus className="w-3.5 h-3.5 mx-auto" /></button>
                       <span className="w-8 text-center text-sm font-bold">{i.qty}</span>
-                      <button onClick={() => updateQty(i.id, i.qty + 1)} className="w-8 h-8 hover:bg-slate-50"><Plus className="w-3.5 h-3.5 mx-auto" /></button>
+                      <button onClick={() => updateQty(i.cartKey || i.id, i.qty + 1)} className="w-8 h-8 hover:bg-slate-50"><Plus className="w-3.5 h-3.5 mx-auto" /></button>
                     </div>
                     <div className="text-right">
                       <div className="font-bold text-slate-900">₹{i.price * i.qty}</div>

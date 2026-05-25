@@ -17,7 +17,11 @@ const CartProvider = ({ children }) => {
   useEffect(() => {
     try {
       const raw = localStorage.getItem('cs_cart');
-      if (raw) setItems(JSON.parse(raw));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // Migrate old cart items that don't have cartKey
+        setItems(parsed.map(item => ({ ...item, cartKey: item.cartKey || `${item.id}::` })));
+      }
       let uid = localStorage.getItem('cs_uid');
       if (!uid) { uid = 'u-' + uuidv4().slice(0, 10); localStorage.setItem('cs_uid', uid); }
       setGuestId(uid);
@@ -42,21 +46,34 @@ const CartProvider = ({ children }) => {
 
   useEffect(() => { if (hydrated) refreshRxStatus(); }, [hydrated, refreshRxStatus]);
 
-  const addItem = useCallback((product, qty = 1) => {
+  const addItem = useCallback((product, qty = 1, variant = null) => {
     // Gate: prescription-required products need an approved Rx
     if (product?.prescription && !rxApproved) {
       return { ok: false, error: 'rx_required', message: 'This item requires a valid prescription approved by our pharmacist.' };
     }
+    const cartKey = `${product.id}::${variant?.id || ''}`;
     setItems(prev => {
-      const exists = prev.find(i => i.id === product.id);
-      if (exists) return prev.map(i => i.id === product.id ? { ...i, qty: i.qty + qty } : i);
-      return [...prev, { id: product.id, name: product.name, price: product.price, mrp: product.mrp, image: product.image, packSize: product.packSize, brand: product.brand, prescription: !!product.prescription, qty }];
+      const exists = prev.find(i => i.cartKey === cartKey);
+      if (exists) return prev.map(i => i.cartKey === cartKey ? { ...i, qty: i.qty + qty } : i);
+      return [...prev, {
+        cartKey,
+        id: product.id,
+        variantId: variant?.id || null,
+        name: product.name,
+        price: variant?.price ?? product.price,
+        mrp: variant?.mrp ?? product.mrp,
+        image: product.image,
+        packSize: variant?.packSize || product.packSize,
+        brand: product.brand,
+        prescription: !!product.prescription,
+        qty,
+      }];
     });
     return { ok: true };
   }, [rxApproved]);
 
-  const removeItem = useCallback((id) => setItems(prev => prev.filter(i => i.id !== id)), []);
-  const updateQty = useCallback((id, qty) => setItems(prev => qty <= 0 ? prev.filter(i => i.id !== id) : prev.map(i => i.id === id ? { ...i, qty } : i)), []);
+  const removeItem = useCallback((cartKey) => setItems(prev => prev.filter(i => (i.cartKey || i.id) !== cartKey)), []);
+  const updateQty = useCallback((cartKey, qty) => setItems(prev => qty <= 0 ? prev.filter(i => (i.cartKey || i.id) !== cartKey) : prev.map(i => (i.cartKey || i.id) === cartKey ? { ...i, qty } : i)), []);
   const clear = useCallback(() => setItems([]), []);
 
   const { subtotal, savings, totalQty } = useMemo(() => {

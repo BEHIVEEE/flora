@@ -14,20 +14,37 @@ const PDP = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [qty, setQty] = useState(1);
-  const inCart = data && items.some(i => i.id === data.product.id);
+  const [selectedVariant, setSelectedVariant] = useState(null);
 
   useEffect(() => {
-    fetch(`/api/products/${id}`).then(r => r.json()).then(d => { setData(d); setLoading(false); });
+    fetch(`/api/products/${id}`).then(r => r.json()).then(d => {
+      setData(d);
+      setLoading(false);
+      if (d?.product?.hasVariants && d.product.variants?.length > 0) {
+        setSelectedVariant(d.product.variants[0]);
+      }
+    });
   }, [id]);
+
+  const cartKey = data ? `${data.product.id}::${selectedVariant?.id || ''}` : null;
+  const inCart = data && items.some(i => (i.cartKey || i.id) === (cartKey || data.product.id));
 
   if (loading) return <div className="container max-w-7xl mx-auto px-4 py-10"><div className="grid md:grid-cols-2 gap-8"><div className="aspect-square skeleton rounded-3xl" /><div><div className="h-8 w-3/4 skeleton rounded mb-3" /><div className="h-6 w-1/3 skeleton rounded mb-3" /><div className="h-24 skeleton rounded" /></div></div></div>;
   if (!data?.product) return <div className="container max-w-7xl mx-auto px-4 py-10 text-center">Product not found</div>;
 
   const p = data.product;
-  const discount = Math.round(((p.mrp - p.price) / p.mrp) * 100);
+  const activePrice = selectedVariant?.price ?? p.price;
+  const activeMrp = selectedVariant?.mrp ?? p.mrp;
+  const activeStock = selectedVariant?.stock ?? p.stock;
+  const activePackSize = selectedVariant?.packSize || p.packSize;
+  const discount = activeMrp > 0 ? Math.round(((activeMrp - activePrice) / activeMrp) * 100) : 0;
 
   const handleAdd = () => {
-    const result = addItem(p, qty);
+    if (p.hasVariants && !selectedVariant) {
+      toast.error('Please select a pack size');
+      return;
+    }
+    const result = addItem(p, qty, selectedVariant);
     if (result?.ok === false) {
       if (result.error === 'rx_required') {
         toast.error('Prescription required', { description: 'Upload a prescription and get it approved by our pharmacist first.' });
@@ -36,7 +53,8 @@ const PDP = () => {
       }
       return;
     }
-    toast.success(`Added ${qty} × ${p.name} to cart`);
+    const label = selectedVariant ? `${p.name} (${selectedVariant.packSize})` : p.name;
+    toast.success(`Added ${qty} × ${label} to cart`);
   };
 
   return (
@@ -88,13 +106,27 @@ const PDP = () => {
             {p.tags?.[0] && <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">{p.tags[0]}</span>}
           </div>
 
+          {/* Variant selector — mobile */}
+          {p.hasVariants && p.variants?.length > 0 && (
+            <div className="mt-3">
+              <div className="text-xs font-semibold text-slate-700 mb-2">Pack Size</div>
+              <div className="flex flex-wrap gap-2">
+                {p.variants.map(v => (
+                  <button key={v.id} onClick={() => setSelectedVariant(v)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${selectedVariant?.id === v.id ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-700 border-slate-300 hover:border-teal-400'}`}>
+                    {v.packSize} <span className="opacity-80">₹{v.price}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Price */}
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900">₹{p.price}</span>
-            {p.mrp > p.price && (<><span className="text-sm text-slate-400 line-through">₹{p.mrp}</span><span className="text-xs font-bold text-emerald-600">{discount}% off</span></>)}
+            <span className="text-2xl font-black text-slate-900">₹{activePrice}</span>
+            {activeMrp > activePrice && (<><span className="text-sm text-slate-400 line-through">₹{activeMrp}</span><span className="text-xs font-bold text-emerald-600">{discount}% off</span></>)}
           </div>
           <div className="text-[11px] text-slate-500">Inclusive of all taxes</div>
-          {p.stock > 0 ? (
+          {activeStock > 0 ? (
             <div className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><Check className="w-3.5 h-3.5" /> In Stock</div>
           ) : (
             <div className="mt-1.5 text-xs font-semibold text-rose-600">Out of stock</div>
@@ -172,13 +204,27 @@ const PDP = () => {
               {p.tags?.[0] && <span className="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-1 rounded-md">{p.tags[0]}</span>}
             </div>
 
+            {/* Variant selector — desktop */}
+            {p.hasVariants && p.variants?.length > 0 && (
+              <div className="mt-4">
+                <div className="text-sm font-semibold text-slate-700 mb-2">Pack Size</div>
+                <div className="flex flex-wrap gap-2">
+                  {p.variants.map(v => (
+                    <button key={v.id} onClick={() => setSelectedVariant(v)}
+                      className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${selectedVariant?.id === v.id ? 'bg-teal-600 text-white border-teal-600 shadow-lift' : 'bg-white text-slate-700 border-slate-300 hover:border-teal-400'}`}>
+                      {v.packSize} <span className={`text-xs ml-1 ${selectedVariant?.id === v.id ? 'opacity-90' : 'text-slate-500'}`}>₹{v.price}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="mt-6 p-5 bg-slate-50 border border-slate-200 rounded-2xl">
               <div className="flex items-baseline gap-3">
-                <div className="text-4xl font-black text-slate-900">₹{p.price}</div>
-                {p.mrp > p.price && (<><div className="text-base text-slate-400 line-through">MRP ₹{p.mrp}</div><div className="text-sm font-bold text-emerald-600">{discount}% off</div></>)}
+                <div className="text-4xl font-black text-slate-900">₹{activePrice}</div>
+                {activeMrp > activePrice && (<><div className="text-base text-slate-400 line-through">MRP ₹{activeMrp}</div><div className="text-sm font-bold text-emerald-600">{discount}% off</div></>)}
               </div>
               <div className="text-xs text-slate-500 mt-1">Inclusive of all taxes</div>
-              {p.stock > 0 ? (
+              {activeStock > 0 ? (
                 <div className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700"><Check className="w-4 h-4" /> In Stock · Ships in 24 hours</div>
               ) : (
                 <div className="mt-3 text-sm font-semibold text-rose-600">Currently out of stock</div>
@@ -227,7 +273,7 @@ const PDP = () => {
             <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
               <Row k="Brand" v={p.brand} />
               <Row k="Manufacturer" v={p.manufacturer} />
-              <Row k="Pack size" v={p.packSize} />
+              <Row k="Pack size" v={activePackSize} />
               <Row k="Prescription" v={p.prescription ? 'Required' : 'Not required'} />
             </div>
           </div>
@@ -248,8 +294,8 @@ const PDP = () => {
       <div className="md:hidden fixed bottom-16 left-0 right-0 z-30 bg-white border-t border-slate-200 px-3 py-2.5 shadow-[0_-4px_20px_-4px_rgba(15,23,42,0.08)]">
         <div className="flex items-center gap-3">
           <div>
-            <div className="text-lg font-black text-slate-900 leading-none">₹{p.price}</div>
-            {p.mrp > p.price && <div className="text-[10px] text-slate-400 line-through">₹{p.mrp}</div>}
+            <div className="text-lg font-black text-slate-900 leading-none">₹{activePrice}</div>
+            {activeMrp > activePrice && <div className="text-[10px] text-slate-400 line-through">₹{activeMrp}</div>}
           </div>
           <div className="inline-flex items-center border border-slate-300 rounded-full overflow-hidden">
             <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-8 h-9"><Minus className="w-3.5 h-3.5 mx-auto" /></button>

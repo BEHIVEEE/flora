@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Save, X, Boxes, Search } from 'lucide-react';
+import { ChevronLeft, Save, X, Boxes, Search, Plus, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -25,6 +25,10 @@ const ProductForm = ({ title, initial = {}, onSave, saving }) => {
     images: initial.images || (initial.image ? [initial.image] : []),
     tags: initial.tags || [],
   });
+  const [hasVariants, setHasVariants] = useState(!!initial.hasVariants);
+  const [variants, setVariants] = useState(
+    initial.variants?.length > 0 ? initial.variants : [{ id: 'v-new-1', packSize: '', price: '', mrp: '', stock: 0 }]
+  );
 
   const [categories, setCategories] = useState([]);
   useEffect(() => {
@@ -36,14 +40,25 @@ const ProductForm = ({ title, initial = {}, onSave, saving }) => {
 
   const update = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
 
+  const addVariant = () => setVariants(v => [...v, { id: 'v-new-' + Date.now(), packSize: '', price: '', mrp: '', stock: 0 }]);
+  const removeVariant = (id) => setVariants(v => v.filter(x => x.id !== id));
+  const updateVariant = (id, key, val) => setVariants(v => v.map(x => x.id === id ? { ...x, [key]: val } : x));
+
   const submit = (e) => {
     e.preventDefault();
     if (!form.name.trim()) return;
+    const cleanVariants = variants.map(v => ({ ...v, price: Number(v.price) || 0, mrp: Number(v.mrp) || Number(v.price) || 0, stock: Number(v.stock) || 0 }));
+    const basePrice = hasVariants ? Math.min(...cleanVariants.map(v => v.price).filter(Boolean)) || 0 : Number(form.price) || 0;
+    const baseMrp = hasVariants ? Math.min(...cleanVariants.map(v => v.mrp).filter(Boolean)) || basePrice : Number(form.mrp) || Number(form.price) || 0;
+    const baseStock = hasVariants ? cleanVariants.reduce((s, v) => s + v.stock, 0) : Number(form.stock) || 0;
     onSave({
       ...form,
-      price: Number(form.price) || 0,
-      mrp: Number(form.mrp) || Number(form.price) || 0,
-      stock: Number(form.stock) || 0,
+      price: basePrice,
+      mrp: baseMrp,
+      stock: baseStock,
+      hasVariants,
+      variants: hasVariants ? cleanVariants : [],
+      packSize: hasVariants ? cleanVariants.map(v => v.packSize).filter(Boolean).join(' / ') : form.packSize,
     });
   };
 
@@ -101,12 +116,41 @@ const ProductForm = ({ title, initial = {}, onSave, saving }) => {
 
         <div className="space-y-5">
           <Card title="Pricing & Inventory">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Selling Price (₹) *" type="number" value={form.price} onChange={v => update('price', v)} placeholder="99" />
-              <Field label="MRP (₹)" type="number" value={form.mrp} onChange={v => update('mrp', v)} placeholder="120" />
-              <Field label="Stock" type="number" value={form.stock} onChange={v => update('stock', v)} placeholder="100" />
-              <Field label="Pack Size" value={form.packSize} onChange={v => update('packSize', v)} placeholder="Strip of 15 tablets" />
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="font-semibold text-sm text-slate-900">Multiple pack sizes / variants</div>
+                <div className="text-xs text-slate-500">e.g. Strip of 10, Strip of 30, 100ml, 200ml</div>
+              </div>
+              <Switch checked={hasVariants} onCheckedChange={setHasVariants} />
             </div>
+            {hasVariants ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-[1fr_80px_80px_70px_32px] gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wide px-1">
+                  <span>Pack Size</span><span>Price ₹</span><span>MRP ₹</span><span>Stock</span><span></span>
+                </div>
+                {variants.map(v => (
+                  <div key={v.id} className="grid grid-cols-[1fr_80px_80px_70px_32px] gap-2 items-center">
+                    <Input value={v.packSize} onChange={e => updateVariant(v.id, 'packSize', e.target.value)} placeholder="Strip of 10" className="h-9 rounded-lg text-sm bg-white" />
+                    <Input type="number" value={v.price} onChange={e => updateVariant(v.id, 'price', e.target.value)} placeholder="99" className="h-9 rounded-lg text-sm bg-white" />
+                    <Input type="number" value={v.mrp} onChange={e => updateVariant(v.id, 'mrp', e.target.value)} placeholder="120" className="h-9 rounded-lg text-sm bg-white" />
+                    <Input type="number" value={v.stock} onChange={e => updateVariant(v.id, 'stock', e.target.value)} placeholder="50" className="h-9 rounded-lg text-sm bg-white" />
+                    <button type="button" onClick={() => removeVariant(v.id)} disabled={variants.length === 1} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-rose-600 disabled:opacity-30">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+                <button type="button" onClick={addVariant} className="flex items-center gap-1.5 text-teal-600 text-sm font-semibold mt-1 hover:text-teal-700">
+                  <Plus className="w-4 h-4" /> Add size
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Selling Price (₹) *" type="number" value={form.price} onChange={v => update('price', v)} placeholder="99" />
+                <Field label="MRP (₹)" type="number" value={form.mrp} onChange={v => update('mrp', v)} placeholder="120" />
+                <Field label="Stock" type="number" value={form.stock} onChange={v => update('stock', v)} placeholder="100" />
+                <Field label="Pack Size" value={form.packSize} onChange={v => update('packSize', v)} placeholder="Strip of 15 tablets" />
+              </div>
+            )}
           </Card>
 
           <Card title="Organization">
