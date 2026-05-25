@@ -71,7 +71,7 @@ const Home = () => {
               {[
                 { icon: Truck, t: 'Free delivery', s: `Above ₹${freeDeliveryAbove}` },
                 { icon: ShieldCheck, t: '100% authentic', s: 'Verified meds' },
-                { icon: Clock, t: 'Express', s: '60-min delivery' },
+                { icon: Clock, t: 'Slot Delivery', s: 'Choose your time' },
               ].map((b, i) => (
                 <div key={i} className="text-left">
                   <div className="w-9 h-9 rounded-lg bg-white text-teal-700 shadow-soft flex items-center justify-center mb-2"><b.icon className="w-4 h-4" /></div>
@@ -110,7 +110,7 @@ const Home = () => {
         <div className="flex animate-marquee whitespace-nowrap py-2.5 text-sm font-medium">
           {Array(2).fill(0).map((_, k) => (
             <div key={k} className="flex shrink-0">
-              {['🏥 Apka Apna Chemist – Trusted Care Near You','💖 Your Health, Our Priority Always','🚚 Free delivery on orders above ₹499','✓ 100% authentic medicines','⏱️ 60-min express delivery in select cities','💊 Upload prescription & save up to 25%'].map((t, i) => (
+              {['🏥 Apka Apna Chemist – Trusted Care Near You','💖 Your Health, Our Priority Always','🚚 Free delivery on orders above ₹499','💊 60%–70% off on generic products','💊 10% off on medicines','⏱️ Scheduled slot-based delivery'].map((t, i) => (
                 <span key={i} className="mx-8 flex items-center gap-2 opacity-90">{t}</span>
               ))}
             </div>
@@ -151,7 +151,7 @@ const Home = () => {
           <div className="relative grid md:grid-cols-2 gap-6 p-7 md:p-12 items-center">
             <div>
               <span className="inline-flex items-center gap-1 bg-white/15 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-semibold mb-4">Save up to 25%</span>
-              <h3 className="text-2xl md:text-4xl font-black tracking-tight text-balance">Upload your prescription, we’ll deliver in 60 minutes.</h3>
+              <h3 className="text-2xl md:text-4xl font-black tracking-tight text-balance">Upload your prescription, we’ll deliver at your chosen slot.</h3>
               <p className="mt-3 text-teal-50 max-w-md text-balance">Our certified pharmacists review every prescription. Authentic medicines, doorstep delivery, full privacy.</p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <Link href="/prescription">
