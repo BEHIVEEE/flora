@@ -15,6 +15,7 @@ const PDP = () => {
   const [loading, setLoading] = useState(true);
   const [qty, setQty] = useState(1);
   const [selectedVariant, setSelectedVariant] = useState(null);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     fetch(`/api/products/${id}`).then(r => r.json()).then(d => {
@@ -44,7 +45,9 @@ const PDP = () => {
       toast.error('Please select a pack size');
       return;
     }
+    setAdding(true);
     const result = await addItem(p, qty, selectedVariant);
+    setAdding(false);
     if (result?.ok === false) {
       if (result.error === 'rx_required') {
         toast.error('Prescription required', { description: 'Upload a prescription and get it approved by our pharmacist first.' });
@@ -247,7 +250,11 @@ const PDP = () => {
                 <span className="w-10 text-center font-bold">{qty}</span>
                 <button onClick={() => setQty(q => q + 1)} className="w-10 h-11 hover:bg-slate-50"><Plus className="w-4 h-4 mx-auto" /></button>
               </div>
-              <Button onClick={handleAdd} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white h-12 rounded-full font-bold shadow-lift"><ShoppingCart className="w-4 h-4 mr-2" /> {inCart ? 'Update Cart' : 'Add to Cart'}</Button>
+              {inCart ? (
+                <Link href="/cart" className="flex-1"><Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-12 rounded-full font-bold shadow-lift"><Check className="w-4 h-4 mr-2" /> Go to Cart</Button></Link>
+              ) : (
+                <Button onClick={handleAdd} disabled={adding} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white h-12 rounded-full font-bold shadow-lift"><ShoppingCart className="w-4 h-4 mr-2" /> {adding ? 'Adding…' : 'Add to Cart'}</Button>
+              )}
               <Button variant="outline" className="h-12 w-12 rounded-full p-0"><Heart className="w-4 h-4" /></Button>
             </div>
 
@@ -302,7 +309,11 @@ const PDP = () => {
             <span className="w-6 text-center text-sm font-bold">{qty}</span>
             <button onClick={() => setQty(q => q + 1)} className="w-8 h-9"><Plus className="w-3.5 h-3.5 mx-auto" /></button>
           </div>
-          <Button onClick={handleAdd} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white h-10 rounded-full font-bold text-sm">Add to Cart</Button>
+          {inCart ? (
+            <Link href="/cart" className="flex-1"><Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-10 rounded-full font-bold text-sm"><Check className="w-3.5 h-3.5 mr-1.5" /> Go to Cart</Button></Link>
+          ) : (
+            <Button onClick={handleAdd} disabled={adding} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white h-10 rounded-full font-bold text-sm">{adding ? 'Adding…' : 'Add to Cart'}</Button>
+          )}
         </div>
       </div>
     </div>
