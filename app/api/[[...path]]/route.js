@@ -1513,6 +1513,10 @@ export async function PATCH(req, { params }) {
       const allowed = ['status', 'verificationNotes', 'archived'];
       const update = {};
       for (const k of allowed) if (k in body) update[k] = body[k];
+      // Keep verificationStatus in sync with status
+      if (body.status === 'Approved') update.verificationStatus = 'approved';
+      else if (body.status === 'Rejected') update.verificationStatus = 'rejected';
+      else if (body.status === 'Under Review') update.verificationStatus = 'pending';
       update.updatedAt = new Date().toISOString();
       await db.collection('prescriptions').updateOne({ id }, { $set: update });
       const prescription = await db.collection('prescriptions').findOne(

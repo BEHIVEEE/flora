@@ -53,9 +53,18 @@ const RxDetail = () => {
   };
 
   const setStatus = async (status) => {
-    await fetch(`/api/prescriptions/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
-    toast.success(`Marked ${status}`);
-    loadRx();
+    const res = await fetch(`/api/prescriptions/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...tokenHeader() },
+      body: JSON.stringify({ status }),
+    });
+    if (res.ok) {
+      toast.success(`Marked ${status}`);
+      loadRx();
+    } else {
+      const d = await res.json().catch(() => ({}));
+      toast.error(d.error || 'Failed to update status');
+    }
   };
 
   if (!rx) return <div className="space-y-3"><div className="h-8 w-1/3 skeleton rounded" /><div className="h-96 skeleton rounded-2xl" /></div>;
