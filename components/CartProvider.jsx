@@ -46,10 +46,14 @@ const CartProvider = ({ children }) => {
 
   useEffect(() => { if (hydrated) refreshRxStatus(); }, [hydrated, refreshRxStatus]);
 
-  const addItem = useCallback((product, qty = 1, variant = null) => {
+  const addItem = useCallback(async (product, qty = 1, variant = null) => {
     // Gate: prescription-required products need an approved Rx
-    if (product?.prescription && !rxApproved) {
-      return { ok: false, error: 'rx_required', message: 'This item requires a valid prescription approved by our pharmacist.' };
+    if (product?.prescription) {
+      // Always do a live check so stale state doesn't block an already-approved Rx
+      const live = await refreshRxStatus();
+      if (!live) {
+        return { ok: false, error: 'rx_required', message: 'This item requires a valid prescription approved by our pharmacist.' };
+      }
     }
     const cartKey = `${product.id}::${variant?.id || ''}`;
     setItems(prev => {
@@ -70,7 +74,7 @@ const CartProvider = ({ children }) => {
       }];
     });
     return { ok: true };
-  }, [rxApproved]);
+  }, [refreshRxStatus]);
 
   const removeItem = useCallback((cartKey) => setItems(prev => prev.filter(i => (i.cartKey || i.id) !== cartKey)), []);
   const updateQty = useCallback((cartKey, qty) => setItems(prev => qty <= 0 ? prev.filter(i => (i.cartKey || i.id) !== cartKey) : prev.map(i => (i.cartKey || i.id) === cartKey ? { ...i, qty } : i)), []);

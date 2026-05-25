@@ -11,14 +11,22 @@ const ProductCard = ({ product, compact = false }) => {
   const [adding, setAdding] = useState(false);
   const discount = Math.round(((product.mrp - product.price) / product.mrp) * 100);
 
-  const handleAdd = (e) => {
+  const handleAdd = async (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (product.hasVariants) {
       window.location.href = `/product/${product.id}`;
       return;
     }
-    addItem(product, 1);
+    const result = await addItem(product, 1);
+    if (result?.ok === false) {
+      if (result.error === 'rx_required') {
+        toast.error('Prescription required', { description: 'Get your Rx approved before adding this item.' });
+      } else {
+        toast.error(result.message || 'Could not add to cart');
+      }
+      return;
+    }
     setAdding(true);
     toast.success(`${product.name} added to cart`, { duration: 1600 });
     setTimeout(() => setAdding(false), 900);

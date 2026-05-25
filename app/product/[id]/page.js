@@ -39,12 +39,12 @@ const PDP = () => {
   const activePackSize = selectedVariant?.packSize || p.packSize;
   const discount = activeMrp > 0 ? Math.round(((activeMrp - activePrice) / activeMrp) * 100) : 0;
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (p.hasVariants && !selectedVariant) {
       toast.error('Please select a pack size');
       return;
     }
-    const result = addItem(p, qty, selectedVariant);
+    const result = await addItem(p, qty, selectedVariant);
     if (result?.ok === false) {
       if (result.error === 'rx_required') {
         toast.error('Prescription required', { description: 'Upload a prescription and get it approved by our pharmacist first.' });
