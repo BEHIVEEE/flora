@@ -1,0 +1,12 @@
+{
+  "name": "florachemist-sync-bridge",
+  "version": "1.0.0",
+  "description": "Syncs stock files from local medical software to FloraChemist website",
+  "main": "sync-bridge.js",
+  "scripts": {
+    "sync": "node sync-bridge.js"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
+}
