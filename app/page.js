@@ -55,10 +55,10 @@ const Home = () => {
               {tagline} · Trusted by 1L+ families
             </div>
             <h1 className="text-3xl sm:text-4xl md:text-6xl font-black text-slate-900 leading-[1.05] tracking-tight text-balance">
-              Your health.<br />
-              <span className="bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-700 bg-clip-text text-transparent">Delivered with care.</span>
+              FloraChemist —<br />
+              <span className="bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-700 bg-clip-text text-transparent">Your Online Pharmacy.</span>
             </h1>
-            <p className="mt-4 text-[15px] md:text-lg text-slate-600 max-w-lg text-balance">Order medicines, healthcare devices, and wellness essentials from certified pharmacists. Fast delivery, authentic products, expert support — every single time.</p>
+            <p className="mt-4 text-[15px] md:text-lg text-slate-600 max-w-lg text-balance">Buy medicines, healthcare devices &amp; wellness products online in India. Fast doorstep delivery, licensed pharmacists, 100% authentic — trusted by 1 lakh+ families.</p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link href="/products">
                 <Button size="lg" className="bg-teal-600 hover:bg-teal-700 text-white h-12 px-6 rounded-full shadow-lift font-semibold">Shop Now <ArrowRight className="ml-1 w-4 h-4" /></Button>
@@ -203,7 +203,7 @@ const Home = () => {
       <section className="bg-slate-50 py-14 md:py-20 mt-6">
         <div className="container max-w-7xl mx-auto px-4">
           <div className="text-center mb-10">
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Why thousands choose ChemistShop</h2>
+            <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Why thousands choose FloraChemist</h2>
             <p className="text-slate-500 mt-2">Dependable healthcare backed by rigorous quality checks</p>
           </div>
           <div className="grid md:grid-cols-4 gap-5">

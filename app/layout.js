@@ -10,11 +10,39 @@ import SettingsProvider from '@/components/SettingsProvider';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
 
+const SITE_URL = 'https://www.florachemist.online';
+const SITE_NAME = 'FloraChemist';
+
 export const metadata = {
-  title: 'ChemistShop — Apka Apna Chemist | Online Pharmacy & Healthcare Store',
-  description: 'Buy medicines, healthcare devices, wellness products & more online. Fast delivery, expert pharmacists, trusted by thousands across India.',
-  keywords: 'online pharmacy, buy medicines, healthcare, pharmacy near me, chemist shop, prescription, wellness',
-  icons: { icon: '/favicon.ico' },
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'FloraChemist — Online Pharmacy | Buy Medicines Online in India',
+    template: '%s | FloraChemist',
+  },
+  description: 'FloraChemist is your trusted online pharmacy. Buy medicines, healthcare devices, wellness products & more. Fast doorstep delivery, licensed pharmacists, 100% authentic — trusted by 1 lakh+ families across India.',
+  keywords: 'FloraChemist, online pharmacy India, buy medicines online, chemist near me, prescription medicines, healthcare store, wellness products, florachemist.online',
+  authors: [{ name: 'FloraChemist', url: SITE_URL }],
+  creator: 'FloraChemist',
+  publisher: 'FloraChemist',
+  robots: { index: true, follow: true, googleBot: { index: true, follow: true } },
+  alternates: { canonical: SITE_URL },
+  openGraph: {
+    type: 'website',
+    locale: 'en_IN',
+    url: SITE_URL,
+    siteName: SITE_NAME,
+    title: 'FloraChemist — Online Pharmacy | Buy Medicines Online in India',
+    description: 'Buy medicines, healthcare devices, wellness products & more. Fast delivery, licensed pharmacists, 100% authentic. Trusted by 1L+ families.',
+    images: [{ url: `${SITE_URL}/og-image.png`, width: 1200, height: 630, alt: 'FloraChemist — Online Pharmacy' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'FloraChemist — Online Pharmacy | Buy Medicines Online in India',
+    description: 'Buy medicines, healthcare devices, wellness products & more. Fast delivery, licensed pharmacists, 100% authentic.',
+    images: [`${SITE_URL}/og-image.png`],
+  },
+  icons: { icon: '/favicon.ico', apple: '/apple-touch-icon.png' },
+  verification: {},
 };
 
 export const viewport = { themeColor: '#0d9488', width: 'device-width', initialScale: 1 };
@@ -28,6 +56,46 @@ const App = ({ children }) => {
         <link rel="preconnect" href="https://images.unsplash.com" crossOrigin="" />
         <link rel="dns-prefetch" href="https://res.cloudinary.com" />
         <link rel="dns-prefetch" href="https://images.unsplash.com" />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@graph': [
+              {
+                '@type': 'Organization',
+                '@id': 'https://www.florachemist.online/#org',
+                name: 'FloraChemist',
+                url: 'https://www.florachemist.online',
+                logo: { '@type': 'ImageObject', url: 'https://www.florachemist.online/logo.png' },
+                sameAs: [],
+              },
+              {
+                '@type': 'WebSite',
+                '@id': 'https://www.florachemist.online/#website',
+                url: 'https://www.florachemist.online',
+                name: 'FloraChemist',
+                description: 'Online Pharmacy & Healthcare Store in India',
+                publisher: { '@id': 'https://www.florachemist.online/#org' },
+                potentialAction: {
+                  '@type': 'SearchAction',
+                  target: { '@type': 'EntryPoint', urlTemplate: 'https://www.florachemist.online/products?q={search_term_string}' },
+                  'query-input': 'required name=search_term_string',
+                },
+              },
+              {
+                '@type': 'Pharmacy',
+                '@id': 'https://www.florachemist.online/#pharmacy',
+                name: 'FloraChemist',
+                description: 'Trusted online pharmacy offering medicines, healthcare devices, and wellness products across India.',
+                url: 'https://www.florachemist.online',
+                telephone: '+919167261103',
+                priceRange: '₹₹',
+                image: 'https://www.florachemist.online/og-image.png',
+                address: { '@type': 'PostalAddress', addressCountry: 'IN' },
+              },
+            ],
+          }) }}
+        />
       </head>
       <body className="min-h-screen bg-white text-slate-900 font-sans antialiased pb-20 md:pb-0 overflow-x-hidden" suppressHydrationWarning>
         <SettingsProvider>
