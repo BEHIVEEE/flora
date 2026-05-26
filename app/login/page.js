@@ -9,7 +9,6 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/components/AuthProvider';
 import { toast } from 'sonner';
 import GoogleLoginButton from '@/components/GoogleLoginButton';
-import OTPLogin from '@/components/OTPLogin';
 
 const LoginInner = () => {
   const router = useRouter();
@@ -21,7 +20,7 @@ const LoginInner = () => {
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [loginMethod, setLoginMethod] = useState('email'); // 'email', 'otp', 'google'
+  const [loginMethod, setLoginMethod] = useState('email'); // 'email', 'google'
 
   const submit = async (e) => {
     e.preventDefault();
@@ -46,7 +45,7 @@ const LoginInner = () => {
         <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-7 shadow-lift">
           {/* Login method tabs */}
           <div className="flex gap-2 mb-6 border-b border-slate-200">
-            {['email', 'otp', 'google'].map((method) => (
+            {['email', 'google'].map((method) => (
               <button
                 key={method}
                 onClick={() => setLoginMethod(method)}
@@ -57,7 +56,6 @@ const LoginInner = () => {
                 }`}
               >
                 {method === 'email' && 'Email'}
-                {method === 'otp' && 'Phone OTP'}
                 {method === 'google' && 'Google'}
               </button>
             ))}
@@ -87,9 +85,6 @@ const LoginInner = () => {
               <Button type="submit" disabled={loading} className="w-full bg-teal-600 hover:bg-teal-700 text-white h-11 rounded-full font-bold shadow-lift">{loading ? 'Signing in…' : 'Sign In'} <ArrowRight className="w-4 h-4 ml-1" /></Button>
             </form>
           )}
-
-          {/* OTP login */}
-          {loginMethod === 'otp' && <OTPLogin />}
 
           {/* Google login */}
           {loginMethod === 'google' && <GoogleLoginButton />}
