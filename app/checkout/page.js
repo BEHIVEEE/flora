@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { ShieldCheck, Truck, Wallet, CreditCard, Smartphone, ChevronRight, MapPin, Lock, Clock, Calendar, Crosshair } from 'lucide-react';
+import { ShieldCheck, Truck, Wallet, CreditCard, Smartphone, ChevronRight, MapPin, Lock, Clock, Calendar, Crosshair, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useDeliveryRange } from '@/hooks/useDeliveryRange';
 import AddressAutocomplete from '@/components/AddressAutocomplete';
@@ -22,12 +22,22 @@ const CheckoutPage = () => {
   const [address, setAddress] = useState({ name: '', phone: '', email: '', line1: '', line2: '', city: 'Mumbai', state: 'Maharashtra', pincode: '', type: 'Home', lat: null, lng: null });
   const [payment, setPayment] = useState('COD');
   const [placing, setPlacing] = useState(false);
+  const [rzpLoaded, setRzpLoaded] = useState(false);
   const [slotDate, setSlotDate] = useState(() => {
     const d = new Date(Date.now() + 86400000); return d.toISOString().slice(0, 10);
   });
   const [slots, setSlots] = useState([]);
   const [slotId, setSlotId] = useState('');
   const { location, loading: locLoading, error: locError, detect, distance, inRange, radiusKm, configured } = useDeliveryRange();
+
+  // Load Razorpay checkout script once
+  useEffect(() => {
+    if (window.Razorpay) { setRzpLoaded(true); return; }
+    const s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.onload = () => setRzpLoaded(true);
+    document.body.appendChild(s);
+  }, []);
   const deliveryFee = (subtotal || 0) >= freeDeliveryAbove ? 0 : deliveryCharge;
   const total = (subtotal || 0) + deliveryFee;
 
@@ -73,32 +83,78 @@ const CheckoutPage = () => {
     return true;
   };
 
+  const orderPayload = () => ({ userId, items, address, payment, subtotal, discount: savings, deliveryFee, total, slotId: slotsEnabled ? slotId : null, slotDate: slotsEnabled ? slotDate : null });
+
+  const placeOrderCOD = async () => {
+    setPlacing(true);
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderPayload()),
+      });
+      const data = await res.json();
+      if (data.order) { clear(); toast.success('Order placed! 🎉'); router.push(`/order-confirmed?id=${data.order.id}`); }
+      else toast.error(data.error || 'Failed to place order');
+    } catch { toast.error('Network error'); }
+    finally { setPlacing(false); }
+  };
+
+  const placeOrderRazorpay = async () => {
+    if (!rzpLoaded) { toast.error('Payment gateway loading, please wait…'); return; }
+    setPlacing(true);
+    try {
+      const res = await fetch('/api/razorpay/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: total }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Could not initiate payment'); setPlacing(false); return; }
+
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        amount: data.amount,
+        currency: data.currency,
+        name: 'FloraChemist',
+        description: `Order · ${items.length} item${items.length > 1 ? 's' : ''}`,
+        order_id: data.orderId,
+        prefill: { name: address.name, contact: address.phone, email: address.email || '' },
+        theme: { color: '#0d9488' },
+        modal: { ondismiss: () => { toast.error('Payment cancelled'); setPlacing(false); } },
+        handler: async (response) => {
+          try {
+            const vRes = await fetch('/api/razorpay/verify-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                orderData: orderPayload(),
+              }),
+            });
+            const vData = await vRes.json();
+            if (vData.ok) { clear(); toast.success('Payment successful! Order placed 🎉'); router.push(`/order-confirmed?id=${vData.order.id}`); }
+            else toast.error(vData.error || 'Payment verification failed');
+          } catch { toast.error('Verification error'); }
+          finally { setPlacing(false); }
+        },
+      };
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', (e) => { toast.error(`Payment failed: ${e.error.description}`); setPlacing(false); });
+      rzp.open();
+    } catch { toast.error('Network error'); setPlacing(false); }
+  };
+
   const placeOrder = async () => {
     if (configured && inRange === false) {
       toast.error(`Sorry, we don't deliver to your location. You're ${distance?.toFixed(1)} km away (max ${radiusKm} km).`);
       return;
     }
     if (slotsEnabled && !slotId) { toast.error('Please choose a delivery slot'); return; }
-    setPlacing(true);
-    try {
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, items, address, payment, subtotal, discount: savings, deliveryFee, total, slotId: slotsEnabled ? slotId : null, slotDate: slotsEnabled ? slotDate : null }),
-      });
-      const data = await res.json();
-      if (data.order) {
-        clear();
-        toast.success('Order placed successfully! 🎉');
-        router.push(`/order-confirmed?id=${data.order.id}`);
-      } else {
-        toast.error(data.error || 'Failed to place order');
-      }
-    } catch (e) {
-      toast.error('Network error');
-    } finally {
-      setPlacing(false);
-    }
+    if (payment === 'COD') await placeOrderCOD();
+    else await placeOrderRazorpay();
   };
 
   return (

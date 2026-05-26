@@ -1014,6 +1014,94 @@ export async function POST(req, { params }) {
       return json({ ok: true, loginCode });
     }
 
+    // ── Razorpay: Create Order ─────────────────────────────────────────────────
+    if (path === 'razorpay/create-order') {
+      const keyId = process.env.RAZORPAY_KEY_ID;
+      const keySecret = process.env.RAZORPAY_KEY_SECRET;
+      if (!keyId || !keySecret) return json({ error: 'Razorpay not configured' }, 503);
+
+      const amountRupees = Number(body.amount);
+      if (!amountRupees || amountRupees < 1) return json({ error: 'Invalid amount' }, 400);
+      const amountPaise = Math.round(amountRupees * 100);
+      if (amountPaise < 100) return json({ error: 'Minimum order amount is ₹1' }, 400);
+
+      const receipt = 'rcpt_' + uuidv4().slice(0, 10);
+      const rzpRes = await fetch('https://api.razorpay.com/v1/orders', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64'),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ amount: amountPaise, currency: 'INR', receipt }),
+      });
+      if (!rzpRes.ok) {
+        const err = await rzpRes.json().catch(() => ({}));
+        return json({ error: err.error?.description || 'Failed to create Razorpay order' }, 500);
+      }
+      const rzpOrder = await rzpRes.json();
+      return json({ orderId: rzpOrder.id, amount: rzpOrder.amount, currency: rzpOrder.currency });
+    }
+
+    // ── Razorpay: Verify Payment + Create DB Order ─────────────────────────────
+    if (path === 'razorpay/verify-payment') {
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderData } = body;
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+        return json({ error: 'Missing payment verification fields' }, 400);
+      }
+      const keySecret = process.env.RAZORPAY_KEY_SECRET;
+      if (!keySecret) return json({ error: 'Razorpay not configured' }, 503);
+
+      const expected = crypto
+        .createHmac('sha256', keySecret)
+        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+        .digest('hex');
+      if (expected !== razorpay_signature) {
+        return json({ error: 'Payment verification failed — signature mismatch' }, 400);
+      }
+
+      // Signature verified — create the DB order
+      const id = 'ORD-' + Date.now().toString(36).toUpperCase() + '-' + uuidv4().slice(0, 4).toUpperCase();
+      const now = new Date().toISOString();
+      const od = orderData || {};
+      const order = {
+        id,
+        userId: od.userId || 'guest',
+        items: od.items || [],
+        address: od.address || {},
+        payment: od.payment || 'ONLINE',
+        subtotal: od.subtotal || 0,
+        discount: od.discount || 0,
+        deliveryFee: od.deliveryFee || 0,
+        total: od.total || 0,
+        slotId: od.slotId || null,
+        slotDate: od.slotDate || null,
+        status: 'Pending',
+        createdAt: now,
+        razorpayOrderId: razorpay_order_id,
+        razorpayPaymentId: razorpay_payment_id,
+        paymentStatus: 'Paid',
+        riderId: null, riderAssignedAt: null,
+        estimatedDelivery: new Date(Date.now() + 3 * 86400000).toISOString(),
+        trackingSteps: [
+          { label: 'Order Confirmed', done: true, time: now },
+          { label: 'Packed', done: false },
+          { label: 'Out for Delivery', done: false },
+          { label: 'Delivered', done: false },
+        ],
+      };
+      await db.collection('orders').insertOne({ ...order });
+      for (const it of (od.items || [])) {
+        const p = await db.collection('products').findOne({ id: it.id });
+        if (p) {
+          const before = p.stock;
+          const after = Math.max(0, before - it.qty);
+          await db.collection('products').updateOne({ id: it.id }, { $set: { stock: after } });
+          await db.collection('inventory_logs').insertOne({ id: 'inv-' + uuidv4().slice(0, 8), productId: it.id, productName: p.name, type: 'sale', qtyChange: -it.qty, before, after, reason: `Order ${id}`, createdAt: now });
+        }
+      }
+      return json({ ok: true, order });
+    }
+
     if (path === 'orders') {
       const id = 'ORD-' + Date.now().toString(36).toUpperCase() + '-' + uuidv4().slice(0, 4).toUpperCase();
       const now = new Date().toISOString();
