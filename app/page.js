@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, ShieldCheck, Truck, Stethoscope, Pill, HeartPulse, Bandage, Baby, Leaf, Sparkles, Activity, Star, Clock, Award, MessageCircle, Upload, Scissors, Bone, Wheat, Clipboard, Sun, Cat, BriefcaseMedical } from 'lucide-react';
+import { ArrowRight, ShieldCheck, Truck, Stethoscope, Pill, HeartPulse, Bandage, Baby, Leaf, Sparkles, Activity, Star, Clock, Award, MessageCircle, Upload, Scissors, Bone, Wheat, Clipboard, Sun, Cat, BriefcaseMedical, ChevronDown, ChevronUp } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
 import ProductSkeleton from '@/components/ProductSkeleton';
 import { Button } from '@/components/ui/button';
@@ -83,7 +83,7 @@ const Home = () => {
           </div>
           <div className="relative">
             <div className="relative aspect-[4/5] md:aspect-square rounded-3xl overflow-hidden shadow-lift">
-              <img src="https://images.unsplash.com/photo-1576602976047-174e57a47881?w=900&q=85" alt="Pharmacy" className="w-full h-full object-cover" />
+              <img src="https://images.unsplash.com/photo-1576602976047-174e57a47881?w=900&q=85" alt="FloraChemist online pharmacy - buy medicines online in India" className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-teal-900/30 via-transparent to-transparent" />
             </div>
             {/* Floating cards */}
@@ -163,7 +163,7 @@ const Home = () => {
               </div>
             </div>
             <div className="relative h-60 md:h-72">
-              <img src="https://images.unsplash.com/photo-1638202993928-7267aad84c31?w=800&q=85" alt="Doctor" className="absolute inset-0 w-full h-full object-cover rounded-2xl shadow-lift" />
+              <img src="https://images.unsplash.com/photo-1638202993928-7267aad84c31?w=800&q=85" alt="Licensed pharmacist reviewing prescription at FloraChemist online pharmacy" className="absolute inset-0 w-full h-full object-cover rounded-2xl shadow-lift" />
             </div>
           </div>
         </div>
@@ -223,6 +223,9 @@ const Home = () => {
         </div>
       </section>
 
+      {/* FAQ */}
+      <FAQ />
+
       {/* Testimonials */}
       <section className="container max-w-7xl mx-auto px-4 py-14 md:py-20">
         <div className="text-center mb-10">
@@ -250,6 +253,46 @@ const Home = () => {
         </div>
       </section>
     </div>
+  );
+};
+
+const FAQ_ITEMS = [
+  { q: 'Is FloraChemist a licensed online pharmacy?', a: 'Yes. FloraChemist is a licensed online pharmacy operating in India. All our medicines are sourced directly from authorised distributors and manufacturers. Every order is verified by our certified pharmacists before dispatch.' },
+  { q: 'How do I buy medicines online at FloraChemist?', a: 'Simply search for your medicine in the search bar, add it to your cart, and place your order. For prescription medicines, upload a valid prescription from a registered doctor. We accept UPI, credit/debit cards, and cash on delivery.' },
+  { q: 'Do I need a prescription to buy medicines?', a: 'Prescription (Rx) medicines require a valid doctor\'s prescription. Our pharmacists review every uploaded prescription before approving the order. Over-the-counter (OTC) products can be purchased without a prescription.' },
+  { q: 'How fast is the delivery?', a: 'We offer same-day and next-day delivery in select areas, and 2–3 day delivery across India. You can also choose a scheduled delivery slot that suits your convenience. Free delivery is available on orders above ₹499.' },
+  { q: 'Are the medicines on FloraChemist authentic?', a: 'Absolutely. We source all medicines directly from authorised pharmaceutical distributors and manufacturers. Every product is verified for authenticity, batch number, and expiry before it reaches you.' },
+  { q: 'Can I return medicines if they are wrong or damaged?', a: 'Yes, we have a 7-day easy return policy for wrong or damaged products. Contact our pharmacist support team and we will arrange a replacement or refund promptly.' },
+  { q: 'How do I upload a prescription?', a: 'Click on "Upload Rx" in the top navigation bar or visit the Prescription page. You can upload a photo or PDF of your doctor\'s prescription. Our pharmacist will review it within a few hours and approve your order.' },
+  { q: 'Does FloraChemist deliver healthcare devices?', a: 'Yes. We stock a wide range of healthcare devices including blood pressure monitors, oximeters, thermometers, glucometers, nebulisers, and more — all at competitive prices with free delivery on qualifying orders.' },
+];
+
+const FAQ = () => {
+  const [open, setOpen] = useState(null);
+  return (
+    <section className="container max-w-4xl mx-auto px-4 py-14 md:py-20">
+      <div className="text-center mb-10">
+        <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Frequently Asked Questions</h2>
+        <p className="text-slate-500 mt-2">Everything you need to know about FloraChemist online pharmacy</p>
+      </div>
+      <div className="space-y-3">
+        {FAQ_ITEMS.map((item, i) => (
+          <div key={i} className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+            <button
+              onClick={() => setOpen(open === i ? null : i)}
+              className="w-full flex items-center justify-between px-5 py-4 text-left gap-4"
+              aria-expanded={open === i}
+            >
+              <span className="font-semibold text-slate-900 text-sm md:text-base">{item.q}</span>
+              {open === i ? <ChevronUp className="w-4 h-4 text-teal-600 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
+            </button>
+            {open === i && (
+              <div className="px-5 pb-4 text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">{item.a}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 };
 

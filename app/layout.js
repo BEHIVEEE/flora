@@ -83,6 +83,16 @@ const App = ({ children }) => {
                 },
               },
               {
+                '@type': 'FAQPage',
+                '@id': 'https://www.florachemist.online/#faq',
+                mainEntity: [
+                  { '@type': 'Question', name: 'Is FloraChemist a licensed online pharmacy?', acceptedAnswer: { '@type': 'Answer', text: 'Yes. FloraChemist is a licensed online pharmacy in India. All medicines are sourced from authorised distributors and verified by certified pharmacists.' } },
+                  { '@type': 'Question', name: 'How do I buy medicines online at FloraChemist?', acceptedAnswer: { '@type': 'Answer', text: 'Search for your medicine, add to cart, and place your order. Upload a prescription for Rx medicines. We accept UPI, cards, and cash on delivery.' } },
+                  { '@type': 'Question', name: 'How fast is medicine delivery?', acceptedAnswer: { '@type': 'Answer', text: 'Same-day and next-day delivery in select areas. 2-3 day delivery across India. Free delivery on orders above ₹499.' } },
+                  { '@type': 'Question', name: 'Are medicines on FloraChemist authentic?', acceptedAnswer: { '@type': 'Answer', text: 'Yes. All medicines are sourced directly from authorised pharmaceutical distributors and verified for authenticity, batch number, and expiry.' } },
+                ],
+              },
+              {
                 '@type': 'Pharmacy',
                 '@id': 'https://www.florachemist.online/#pharmacy',
                 name: 'FloraChemist',
