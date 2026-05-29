@@ -83,7 +83,7 @@ const Home = () => {
           </div>
           <div className="relative">
             <div className="relative aspect-[4/5] md:aspect-square rounded-3xl overflow-hidden shadow-lift">
-              <img src="https://images.unsplash.com/photo-1576602976047-174e57a47881?w=900&q=85" alt="FloraChemist online pharmacy - buy medicines online in India" className="w-full h-full object-cover" />
+              <img src="https://images.unsplash.com/photo-1576602976047-174e57a47881?w=600&q=75" alt="FloraChemist online pharmacy - buy medicines online in India" className="w-full h-full object-cover" loading="lazy" decoding="async" />
               <div className="absolute inset-0 bg-gradient-to-t from-teal-900/30 via-transparent to-transparent" />
             </div>
             {/* Floating cards */}
@@ -163,7 +163,7 @@ const Home = () => {
               </div>
             </div>
             <div className="relative h-60 md:h-72">
-              <img src="https://images.unsplash.com/photo-1638202993928-7267aad84c31?w=800&q=85" alt="Licensed pharmacist reviewing prescription at FloraChemist online pharmacy" className="absolute inset-0 w-full h-full object-cover rounded-2xl shadow-lift" />
+              <img src="https://images.unsplash.com/photo-1638202993928-7267aad84c31?w=500&q=75" alt="Licensed pharmacist reviewing prescription at FloraChemist online pharmacy" className="absolute inset-0 w-full h-full object-cover rounded-2xl shadow-lift" loading="lazy" decoding="async" />
             </div>
           </div>
         </div>

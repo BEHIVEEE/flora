@@ -21,6 +21,28 @@ const nextConfig = {
   },
   async headers() {
     return [
+      // Static assets — long cache (fingerprinted by Next.js)
+      {
+        source: "/_next/static/(.*)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+      // Images
+      {
+        source: "/(.*)\\.(jpg|jpeg|png|webp|avif|svg|ico)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=2592000, must-revalidate" },
+        ],
+      },
+      // Fonts
+      {
+        source: "/(.*)\\.(woff|woff2|ttf|otf)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+      // All routes
       {
         source: "/(.*)",
         headers: [
