@@ -1,6 +1,6 @@
 'use client';
 import { useRef, useState, useCallback } from 'react';
-import { Upload, X, Star, Loader2, Link2, Plus } from 'lucide-react';
+import { Upload, X, Star, Loader2, Link2, Plus, ImageOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -12,6 +12,7 @@ const ImageUploader = ({ images = [], onChange, max = 6, folder = 'chemistshop/p
   const [uploading, setUploading] = useState({}); // { [previewUrl]: true }
   const [urlInput, setUrlInput] = useState('');
   const [showUrlBox, setShowUrlBox] = useState(false);
+  const [brokenImages, setBrokenImages] = useState({});
 
   const getAuthHeader = () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('cs_token') : '';
@@ -99,7 +100,21 @@ const ImageUploader = ({ images = [], onChange, max = 6, folder = 'chemistshop/p
       <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
         {displayItems.map((item, i) => (
           <div key={item.value + i} className="group relative aspect-square rounded-xl border-2 border-slate-200 bg-slate-50 overflow-hidden">
-            <img src={item.value} alt={`img-${i}`} className="w-full h-full object-cover" />
+            <img
+              src={item.value}
+              alt={`img-${i}`}
+              referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
+              onError={() => setBrokenImages(prev => ({ ...prev, [item.value]: true }))}
+              onLoad={() => setBrokenImages(prev => { const next = { ...prev }; delete next[item.value]; return next; })}
+              className={`w-full h-full object-cover ${brokenImages[item.value] ? 'hidden' : ''}`}
+            />
+            {brokenImages[item.value] && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-100 text-slate-400 gap-1">
+                <ImageOff className="w-6 h-6" />
+                <span className="text-[10px] font-semibold text-center px-1">Image not available</span>
+              </div>
+            )}
             {item.type === 'uploading' && (
               <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
                 <Loader2 className="w-6 h-6 text-white animate-spin" />
