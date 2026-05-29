@@ -179,27 +179,64 @@ async function processFile(filePath) {
 
   log(`Mapped ${mapped.length} items`);
 
-  let result;
-  if (isStockOnly(mapped)) {
-    log('Mode: Stock-only update');
-    result = await post('/api/sync/stock', { stock: mapped });
+  // For large files (>1000 items), use batch endpoint with chunking
+  const BATCH_SIZE = 5000;
+  let totalCreated = 0, totalUpdated = 0, totalErrors = 0;
+
+  if (mapped.length > 1000) {
+    log(`Large file detected (${mapped.length} items). Using batch sync with ${BATCH_SIZE}-item chunks...`);
+    
+    for (let i = 0; i < mapped.length; i += BATCH_SIZE) {
+      const chunk = mapped.slice(i, i + BATCH_SIZE);
+      const chunkNum = Math.floor(i / BATCH_SIZE) + 1;
+      const totalChunks = Math.ceil(mapped.length / BATCH_SIZE);
+      
+      log(`Syncing chunk ${chunkNum}/${totalChunks} (${chunk.length} items)...`);
+      
+      const result = await post('/api/sync/batch', { products: chunk });
+      
+      if (result.status === 200) {
+        const b = result.body;
+        totalCreated += b.created || 0;
+        totalUpdated += b.updated || 0;
+        totalErrors += b.errors?.length || 0;
+        log(`  Chunk ${chunkNum}: created=${b.created} updated=${b.updated} errors=${b.errors?.length || 0} (${b.duration})`);
+      } else {
+        log(`  ERROR in chunk ${chunkNum}: ${JSON.stringify(result.body)}`);
+        totalErrors += chunk.length;
+      }
+    }
+    
+    log(`BATCH COMPLETE: created=${totalCreated} updated=${totalUpdated} total_errors=${totalErrors}`);
   } else {
-    log('Mode: Full product sync');
-    result = await post('/api/sync/products', { products: mapped });
+    // For smaller files, use stock-only or full product sync
+    let result;
+    if (isStockOnly(mapped)) {
+      log('Mode: Stock-only update');
+      result = await post('/api/sync/stock', { stock: mapped });
+    } else {
+      log('Mode: Full product sync');
+      result = await post('/api/sync/products', { products: mapped });
+    }
+
+    if (result.status === 200) {
+      const b = result.body;
+      totalCreated = b.created || 0;
+      totalUpdated = b.updated || 0;
+      totalErrors = b.errors?.length || 0;
+      log(`SUCCESS: created=${totalCreated} updated=${totalUpdated} errors=${totalErrors}`);
+    } else {
+      log(`ERROR from API: ${JSON.stringify(result.body)}`);
+      return;
+    }
   }
 
-  if (result.status === 200) {
-    const b = result.body;
-    log(`SUCCESS: created=${b.created ?? '-'} updated=${b.updated ?? b.updated ?? '-'} errors=${b.errors?.length ?? 0}`);
-    // Move file to processed folder to avoid re-processing
-    const processedDir = path.join(CONFIG.watchFolder, 'processed');
-    if (!fs.existsSync(processedDir)) fs.mkdirSync(processedDir, { recursive: true });
-    const dest = path.join(processedDir, `${Date.now()}_${path.basename(filePath)}`);
-    fs.renameSync(filePath, dest);
-    log(`Moved to: ${dest}`);
-  } else {
-    log(`ERROR from API: ${JSON.stringify(result.body)}`);
-  }
+  // Move file to processed folder to avoid re-processing
+  const processedDir = path.join(CONFIG.watchFolder, 'processed');
+  if (!fs.existsSync(processedDir)) fs.mkdirSync(processedDir, { recursive: true });
+  const dest = path.join(processedDir, `${Date.now()}_${path.basename(filePath)}`);
+  fs.renameSync(filePath, dest);
+  log(`Moved to: ${dest}`);
 }
 
 async function run() {
