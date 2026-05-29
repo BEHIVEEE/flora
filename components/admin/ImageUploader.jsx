@@ -1,6 +1,6 @@
 'use client';
 import { useRef, useState, useCallback } from 'react';
-import { Upload, X, Star, Loader2, Link2, Plus, ImageOff } from 'lucide-react';
+import { Upload, X, Star, Loader2, Link2, Plus, ImageOff, Clipboard } from 'lucide-react';
 import { toast } from 'sonner';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -89,6 +89,22 @@ const ImageUploader = ({ images = [], onChange, max = 6, folder = 'chemistshop/p
     if (e.dataTransfer.files?.length) processFiles(e.dataTransfer.files);
   }, [images]);
 
+  const onPaste = useCallback((e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageFiles = [];
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+    if (imageFiles.length) {
+      e.preventDefault();
+      processFiles(imageFiles);
+    }
+  }, [images]);
+
   // Combine real URLs with temporary preview URLs for display
   const displayItems = [
     ...images.map(url => ({ type: 'url', value: url })),
@@ -96,7 +112,7 @@ const ImageUploader = ({ images = [], onChange, max = 6, folder = 'chemistshop/p
   ];
 
   return (
-    <div>
+    <div onPaste={onPaste} tabIndex={-1}>
       <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
         {displayItems.map((item, i) => (
           <div key={item.value + i} className="group relative aspect-square rounded-xl border-2 border-slate-200 bg-slate-50 overflow-hidden">
@@ -158,7 +174,10 @@ const ImageUploader = ({ images = [], onChange, max = 6, folder = 'chemistshop/p
       <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={e => { processFiles(e.target.files); e.target.value = ''; }} />
 
       <div className="mt-3 flex items-center justify-between flex-wrap gap-2">
-        <div className="text-xs text-slate-500">{images.length} / {max} images · Max 2MB each · First image is the product cover</div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-[11px] text-slate-400 flex items-center gap-1"><Clipboard className="w-3 h-3" /> Ctrl+V to paste</span>
+          <span className="text-xs text-slate-500">{images.length} / {max} images · Max 2MB each · First image is the product cover</span>
+        </div>
         <button type="button" onClick={() => setShowUrlBox(s => !s)} className="text-xs font-bold text-teal-700 hover:text-teal-800 inline-flex items-center gap-1">
           <Link2 className="w-3.5 h-3.5" /> {showUrlBox ? 'Cancel' : 'Paste image URL(s)'}
         </button>
