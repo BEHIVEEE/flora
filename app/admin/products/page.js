@@ -14,6 +14,7 @@ const ProductsList = () => {
   const [sort, setSort] = useState('newest');
   const [categories, setCategories] = useState([]);
   const [selected, setSelected] = useState(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetch('/api/categories?tree=true').then(r => r.json()).then(d => setCategories(d.categories || []));
@@ -60,15 +61,22 @@ const ProductsList = () => {
     if (!selected.size) { toast.error('No products selected'); return; }
     if (!confirm(`Delete ${selected.size} product${selected.size > 1 ? 's' : ''}? This cannot be undone.`)) return;
     
+    setDeleting(true);
     let deleted = 0;
-    for (const id of selected) {
+    const ids = Array.from(selected);
+    
+    for (const id of ids) {
       try {
-        await fetch(`/api/products/${id}`, { method: 'DELETE' });
-        deleted++;
-      } catch {}
+        const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
+        if (res.ok) deleted++;
+      } catch (e) {
+        console.error(`Failed to delete ${id}:`, e);
+      }
     }
+    
     toast.success(`Deleted ${deleted} product${deleted > 1 ? 's' : ''}`);
     setSelected(new Set());
+    setDeleting(false);
     load();
   };
 
@@ -81,8 +89,8 @@ const ProductsList = () => {
         </div>
         <div className="flex gap-2">
           {selected.size > 0 && (
-            <Button variant="destructive" onClick={deleteSelected} className="rounded-full h-10 font-semibold">
-              <Trash className="w-4 h-4 mr-1" /> Delete {selected.size}
+            <Button variant="destructive" onClick={deleteSelected} disabled={deleting} className="rounded-full h-10 font-semibold">
+              <Trash className="w-4 h-4 mr-1" /> {deleting ? 'Deleting…' : `Delete ${selected.size}`}
             </Button>
           )}
           <Link href="/admin/products/import"><Button variant="outline" className="rounded-full h-10 font-semibold"><Upload className="w-4 h-4 mr-1" /> Import CSV</Button></Link>
