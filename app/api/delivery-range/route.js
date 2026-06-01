@@ -7,6 +7,8 @@ export async function POST(req) {
   try {
     const { lat, lng, pincode } = await req.json();
 
+    console.log('Delivery range request:', { lat, lng, pincode });
+
     if (!lat && !lng && !pincode) {
       return NextResponse.json({ error: 'Missing lat/lng or pincode' }, { status: 400 });
     }
@@ -16,12 +18,19 @@ export async function POST(req) {
 
     // If pincode provided, look up coordinates
     if (pincode && (!lat || !lng)) {
+      console.log('Looking up pincode:', pincode);
       const coords = PINCODE_COORDS[pincode];
+      console.log('Pincode lookup result:', coords);
+      
       if (!coords) {
-        return NextResponse.json({ error: 'Pincode not found in our database. Please use location detection.' }, { status: 400 });
+        console.log('Available pincodes:', Object.keys(PINCODE_COORDS).slice(0, 10));
+        return NextResponse.json({ 
+          error: `Pincode ${pincode} not found. Try: 400001, 400050, 400060, 401107` 
+        }, { status: 400 });
       }
       latitude = coords.lat;
       longitude = coords.lng;
+      console.log('Using coordinates for pincode:', { latitude, longitude });
     }
 
     const db = await getDb();

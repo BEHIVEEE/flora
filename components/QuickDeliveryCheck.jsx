@@ -129,13 +129,19 @@ const QuickDeliveryCheck = () => {
     setDistance(null);
 
     try {
+      console.log('Checking pincode:', manualPincode);
+      const payload = { pincode: manualPincode };
+      console.log('Sending payload:', payload);
+      
       const res = await fetch('/api/delivery-range', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pincode: manualPincode }),
+        body: JSON.stringify(payload),
       });
 
+      console.log('Response status:', res.status);
       const data = await res.json();
+      console.log('Response data:', data);
 
       if (!res.ok) {
         toast.error(data.error || `Pincode ${manualPincode} not found. Try another pincode.`);
