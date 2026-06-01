@@ -24,12 +24,13 @@ const CONFIG = {
   apiKey: process.env.SYNC_API_KEY || 'YOUR_SYNC_API_KEY_HERE',
 
   // Column name mappings (edit to match whatever your software exports)
+  // Supports: Modern Pharma, Generics, and other pharmacy management systems
   columns: {
-    id:        ['id', 'sku', 'item_code', 'code', 'product_id'],
-    name:      ['name', 'product_name', 'item_name', 'medicine_name', 'description'],
-    brand:     ['brand', 'manufacturer', 'company', 'mfr'],
-    category:  ['category', 'cat', 'group', 'department'],
-    price:     ['price', 'sale_price', 'selling_price', 'rate'],
+    id:        ['id', 'sku', 'item_code', 'code', 'product_id', 'product'],
+    name:      ['name', 'product_name', 'item_name', 'medicine_name', 'description', 'product'],
+    brand:     ['brand', 'manufacturer', 'company', 'mfr', 'company_name'],
+    category:  ['category', 'cat', 'group', 'department', 'scheme_wise'],
+    price:     ['price', 'sale_price', 'selling_price', 'rate', 'ptr'],
     mrp:       ['mrp', 'max_price', 'maximum_retail_price'],
     stock:     ['stock', 'qty', 'quantity', 'balance', 'closing_stock', 'available'],
     packSize:  ['pack_size', 'packsize', 'pack', 'packing', 'unit'],

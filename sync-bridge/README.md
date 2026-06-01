@@ -31,15 +31,40 @@ Automatically pushes stock updates from your local medical software to the Flora
 3. Pushes stock updates to `https://www.florachemist.online/api/sync/stock`
 4. Moves processed files to `C:\StockUpdates\processed\` so they aren't re-sent
 
-## Column name mapping
+## Supported CSV formats
 
-The script auto-detects common column names. For stock it looks for:
-`stock`, `qty`, `quantity`, `balance`, `closing_stock`, `available`
+### Modern Pharma & Generics (Recommended)
+Your software exports with these columns:
+```
+Company, Product, Packing, Stock, MRP, PTR, SchPer
+```
 
-For product ID it looks for:
-`id`, `sku`, `item_code`, `code`, `product_id`
+The script automatically maps:
+- `Company` → Brand
+- `Product` → Product Name
+- `Packing` → Pack Size
+- `Stock` → Available Quantity
+- `MRP` → Maximum Retail Price
+- `PTR` → Selling Price (Pharmacy Trade Rate)
 
-If your software uses a different column name, edit the `columns` section in `sync-bridge.js`.
+### Custom column mapping
+
+If your software uses different column names, edit the `columns` section in `sync-bridge.js`:
+
+```javascript
+columns: {
+  id:        ['id', 'sku', 'item_code', 'code', 'product_id', 'product'],
+  name:      ['name', 'product_name', 'item_name', 'medicine_name', 'description', 'product'],
+  brand:     ['brand', 'manufacturer', 'company', 'mfr', 'company_name'],
+  category:  ['category', 'cat', 'group', 'department', 'scheme_wise'],
+  price:     ['price', 'sale_price', 'selling_price', 'rate', 'ptr'],
+  mrp:       ['mrp', 'max_price', 'maximum_retail_price'],
+  stock:     ['stock', 'qty', 'quantity', 'balance', 'closing_stock', 'available'],
+  packSize:  ['pack_size', 'packsize', 'pack', 'packing', 'unit'],
+},
+```
+
+Add your column names to the arrays. The script will use the first match it finds.
 
 ## Log file
 
