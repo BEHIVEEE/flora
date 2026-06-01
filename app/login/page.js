@@ -1,5 +1,5 @@
 'use client';
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Lock, Mail, Eye, EyeOff, ArrowRight, Shield, Phone, Loader2 } from 'lucide-react';
@@ -29,6 +29,17 @@ const LoginInner = () => {
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState('');
 
+  // Load reCAPTCHA
+  useEffect(() => {
+    if (!window.grecaptcha) {
+      const script = document.createElement('script');
+      script.src = `https://www.google.com/recaptcha/api.js?render=${process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI'}`;
+      script.async = true;
+      script.defer = true;
+      document.body.appendChild(script);
+    }
+  }, []);
+
   const submit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -49,10 +60,16 @@ const LoginInner = () => {
     setOtpLoading(true);
     setOtpError('');
     try {
+      // Get reCAPTCHA token
+      const recaptchaToken = await window.grecaptcha?.execute(
+        process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+        { action: 'login' }
+      ).catch(() => '');
+      
       const res = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone, recaptchaToken }),
       });
       const data = await res.json();
       if (data.ok) {
