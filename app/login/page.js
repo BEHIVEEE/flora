@@ -31,9 +31,44 @@ const LoginInner = () => {
   const recaptchaRef = useRef(null);
   const [recaptchaLoaded, setRecaptchaLoaded] = useState(false);
 
-  // Simple OTP setup - just enable the button
+  // Load Firebase SDK and reCAPTCHA
   useEffect(() => {
-    if (loginMethod === 'otp') {
+    if (loginMethod !== 'otp') return;
+    
+    // Load Firebase SDK
+    if (!window.firebase) {
+      const script = document.createElement('script');
+      script.src = 'https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js';
+      script.onload = () => {
+        const authScript = document.createElement('script');
+        authScript.src = 'https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js';
+        authScript.onload = () => {
+          // Initialize Firebase
+          if (!window.firebase.apps.length) {
+            window.firebase.initializeApp({
+              apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+              authDomain: 'florachemist-aa51a.firebaseapp.com',
+              projectId: 'florachemist-aa51a',
+            });
+          }
+          
+          // Load reCAPTCHA
+          if (!window.grecaptcha) {
+            const recaptchaScript = document.createElement('script');
+            recaptchaScript.src = 'https://www.google.com/recaptcha/api.js';
+            recaptchaScript.onload = () => {
+              setRecaptchaLoaded(true);
+              console.log('Firebase and reCAPTCHA ready');
+            };
+            document.body.appendChild(recaptchaScript);
+          } else {
+            setRecaptchaLoaded(true);
+          }
+        };
+        document.body.appendChild(authScript);
+      };
+      document.body.appendChild(script);
+    } else {
       setRecaptchaLoaded(true);
     }
   }, [loginMethod]);
@@ -59,25 +94,34 @@ const LoginInner = () => {
     setOtpError('');
     
     try {
-      const res = await fetch('/api/auth/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
-      });
-      
-      const data = await res.json();
-      
-      if (data.ok) {
-        setOtpSent(true);
-        toast.success('OTP sent! Check console for OTP (dev mode)');
-      } else {
-        setOtpError(data.error || 'Failed to send OTP');
-        toast.error(data.error || 'Failed to send OTP');
+      if (!window.firebase?.auth) {
+        throw new Error('Firebase not initialized');
       }
+      
+      const auth = window.firebase.auth();
+      const phoneNumber = '+91' + phone;
+      
+      // Create reCAPTCHA verifier
+      const appVerifier = new window.firebase.auth.RecaptchaVerifier('recaptcha-container', {
+        size: 'invisible',
+        callback: (token) => {
+          console.log('reCAPTCHA token received');
+        },
+        'expired-callback': () => {
+          console.log('reCAPTCHA expired');
+        }
+      }, auth);
+      
+      // Send OTP via Firebase
+      const confirmationResult = await auth.signInWithPhoneNumber(phoneNumber, appVerifier);
+      window.confirmationResult = confirmationResult;
+      
+      setOtpSent(true);
+      toast.success('OTP sent to your phone!');
     } catch (err) {
       console.error('OTP send error:', err);
-      setOtpError('Failed to send OTP');
-      toast.error('Failed to send OTP');
+      setOtpError(err.message || 'Failed to send OTP');
+      toast.error(err.message || 'Failed to send OTP');
     }
     
     setOtpLoading(false);
@@ -90,10 +134,22 @@ const LoginInner = () => {
     }
     setOtpLoading(true);
     try {
-      const res = await fetch('/api/auth/verify-otp', {
+      if (!window.confirmationResult) {
+        throw new Error('OTP session expired. Request new OTP.');
+      }
+      
+      // Verify OTP with Firebase
+      const result = await window.confirmationResult.confirm(otp);
+      const user = result.user;
+      
+      // Get ID token
+      const idToken = await user.getIdToken();
+      
+      // Send to backend to create session
+      const res = await fetch('/api/auth/firebase-verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp }),
+        body: JSON.stringify({ idToken, phone }),
       });
       
       const data = await res.json();
@@ -105,13 +161,13 @@ const LoginInner = () => {
         if (data.user?.role === 'admin') router.replace('/admin');
         else router.replace(next || '/');
       } else {
-        setOtpError(data.error || 'Invalid OTP');
-        toast.error(data.error || 'Invalid OTP');
+        setOtpError(data.error || 'Login failed');
+        toast.error(data.error || 'Login failed');
       }
     } catch (err) {
       console.error('Verify error:', err);
-      setOtpError('Verification failed');
-      toast.error('Verification failed');
+      setOtpError(err.message || 'Verification failed');
+      toast.error(err.message || 'Verification failed');
     }
     setOtpLoading(false);
   };
