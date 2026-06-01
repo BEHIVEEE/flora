@@ -37,6 +37,18 @@ const QuickDeliveryCheck = () => {
         setResult('out-of-range');
         setDistance(data.distance);
         toast.error(`❌ Sorry, we don't deliver to your location yet. You're ${data.distance.toFixed(1)} km away.`);
+        
+        // Log out-of-range view for analytics
+        fetch('/api/analytics/out-of-range', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lat: latitude,
+            lng: longitude,
+            distance: data.distance,
+            radiusKm: data.radiusKm,
+          }),
+        }).catch(() => {});
       }
     } catch (error) {
       console.error('Geolocation error:', error);
