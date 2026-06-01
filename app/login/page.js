@@ -1,5 +1,5 @@
 'use client';
-import { useState, Suspense } from 'react';
+import { useState, Suspense, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Lock, Mail, Eye, EyeOff, ArrowRight, Shield, Phone, Loader2 } from 'lucide-react';
@@ -28,6 +28,28 @@ const LoginInner = () => {
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState('');
+  const recaptchaRef = useRef(null);
+  const [recaptchaLoaded, setRecaptchaLoaded] = useState(false);
+
+  // Load reCAPTCHA v2 script
+  useEffect(() => {
+    if (document.getElementById('recaptcha-script')) {
+      setRecaptchaLoaded(true);
+      return;
+    }
+    
+    const script = document.createElement('script');
+    script.id = 'recaptcha-script';
+    script.src = 'https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoad&render=explicit';
+    script.async = true;
+    script.defer = true;
+    
+    window.onRecaptchaLoad = () => {
+      setRecaptchaLoaded(true);
+    };
+    
+    document.body.appendChild(script);
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -50,10 +72,23 @@ const LoginInner = () => {
     setOtpError('');
     
     try {
+      // Execute reCAPTCHA if available
+      let recaptchaToken = '';
+      if (window.grecaptcha && recaptchaRef.current) {
+        recaptchaToken = window.grecaptcha.getResponse();
+        if (!recaptchaToken) {
+          // Trigger reCAPTCHA
+          window.grecaptcha.execute();
+          // Wait a bit for user to complete
+          await new Promise(r => setTimeout(r, 1000));
+          recaptchaToken = window.grecaptcha.getResponse();
+        }
+      }
+      
       const res = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone, recaptchaToken }),
       });
       const data = await res.json();
       
@@ -181,14 +216,24 @@ const LoginInner = () => {
                     </div>
                     <p className="text-xs text-slate-500 mt-1">Enter 10-digit mobile number</p>
                   </div>
+                  
+                  {/* reCAPTCHA widget */}
+                  <div 
+                    ref={recaptchaRef}
+                    className="g-recaptcha"
+                    data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"
+                    data-size="invisible"
+                    data-callback="onRecaptchaSuccess"
+                  />
+                  
                   <Button 
                     type="button" 
                     onClick={sendOTP} 
-                    disabled={otpLoading || phone.length !== 10}
+                    disabled={otpLoading || phone.length !== 10 || !recaptchaLoaded}
                     className="w-full bg-teal-600 hover:bg-teal-700 text-white h-11 rounded-full font-bold"
                   >
                     {otpLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                    Send OTP
+                    {!recaptchaLoaded ? 'Loading...' : 'Send OTP'}
                   </Button>
                 </>
               ) : (
