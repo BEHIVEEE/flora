@@ -296,7 +296,11 @@ const Import = () => {
         <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center">
           <div className="w-16 h-16 mx-auto bg-emerald-100 rounded-full flex items-center justify-center mb-3"><Check className="w-8 h-8 text-emerald-600" /></div>
           <h2 className="text-2xl font-black text-slate-900">Import Complete</h2>
-          <p className="text-slate-600 mt-1"><span className="font-bold text-emerald-600">{result.created}</span> products created · <span className="font-bold text-rose-600">{result.failed}</span> failed</p>
+          <p className="text-slate-600 mt-1">
+            <span className="font-bold text-emerald-600">{result.created}</span> created · 
+            <span className="font-bold text-blue-600"> {result.updated}</span> updated · 
+            <span className="font-bold text-rose-600"> {result.failed}</span> failed
+          </p>
           {result.errors?.length > 0 && <div className="mt-3 text-xs text-rose-700 bg-rose-50 rounded-xl p-3 max-w-md mx-auto text-left"><div className="font-bold mb-1">Errors</div><ul className="list-disc list-inside space-y-0.5">{result.errors.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}</ul></div>}
           <div className="mt-6 flex gap-2 justify-center">
             <Link href="/admin/products"><Button className="bg-teal-600 hover:bg-teal-700 rounded-full font-semibold">Back to Products</Button></Link>

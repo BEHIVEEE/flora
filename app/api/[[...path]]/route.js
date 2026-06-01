@@ -1157,10 +1157,10 @@ export async function POST(req, { params }) {
       return json({ product });
     }
 
-    // Bulk product import
+    // Bulk product import (with upsert - update existing or create new)
     if (path === 'products/bulk') {
       const items = body.products || [];
-      const results = { created: 0, failed: 0, errors: [] };
+      const results = { created: 0, updated: 0, failed: 0, errors: [] };
       // Pre-fetch all categories once for fast lookup
       const allCats = await db.collection('categories').find({}, { projection: { _id: 0 } }).toArray();
       const findCat = (val) => {
@@ -1171,7 +1171,6 @@ export async function POST(req, { params }) {
       for (const raw of items) {
         try {
           if (!raw.name) { results.failed++; results.errors.push('Missing name'); continue; }
-          const id = 'p-' + uuidv4().slice(0, 8);
           const rawImages = raw.images || (raw.imageUrl ? [raw.imageUrl] : (raw.image ? [raw.image] : []));
           const images = sanitizeImages(rawImages);
 
@@ -1179,30 +1178,79 @@ export async function POST(req, { params }) {
           const mainCat = findCat(raw.category);
           const subCat = findCat(raw.subcategory);
           const brandCat = findCat(raw.brand);
+          const brandName = brandCat?.name || raw.brand || 'Generic';
+          
+          // Check if product exists by name + brand (case-insensitive)
+          const existing = await db.collection('products').findOne({
+            name: { $regex: new RegExp(`^${raw.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+            brand: { $regex: new RegExp(`^${brandName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+          });
 
-          const product = {
-            id, name: raw.name,
-            slug: raw.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-            category: mainCat?.id || raw.category || 'medicines',
-            categoryId: mainCat?.id || null,
-            subcategoryId: subCat?.id || null,
-            brand: brandCat?.name || raw.brand || 'Generic',
-            brandId: brandCat?.id || null,
-            manufacturer: raw.manufacturer || '',
-            price: Number(raw.price) || 0, mrp: Number(raw.mrp) || Number(raw.price) || 0,
-            packSize: raw.packSize || raw.pack_size || '',
-            image: images[0] || '', images,
-            stock: Number(raw.stock) || 0,
-            prescription: String(raw.prescription || '').toLowerCase() === 'true' || raw.prescription === true,
-            rating: 4.5, ratingCount: 0, tags: [],
-            description: raw.description || '',
-            createdAt: new Date().toISOString(),
-          };
-          await db.collection('products').insertOne({ ...product });
-          if (product.stock > 0) {
-            await db.collection('inventory_logs').insertOne({ id: 'inv-' + uuidv4().slice(0, 8), productId: id, productName: product.name, type: 'import', qtyChange: product.stock, before: 0, after: product.stock, reason: 'Bulk CSV import', createdAt: new Date().toISOString() });
+          const price = Number(raw.price) || 0;
+          const mrp = Number(raw.mrp) || price;
+          const newStock = Number(raw.stock) || 0;
+
+          if (existing) {
+            // Update existing product - add to stock
+            const oldStock = existing.stock || 0;
+            const stockDiff = newStock - oldStock;
+            await db.collection('products').updateOne(
+              { _id: existing._id },
+              { 
+                $set: {
+                  price, mrp,
+                  packSize: raw.packSize || raw.pack_size || '',
+                  image: images[0] || existing.image,
+                  images: images.length ? images : existing.images,
+                  stock: newStock,
+                  prescription: String(raw.prescription || '').toLowerCase() === 'true' || raw.prescription === true,
+                  description: raw.description || existing.description,
+                  updatedAt: new Date().toISOString(),
+                }
+              }
+            );
+            // Log inventory change
+            if (stockDiff !== 0) {
+              await db.collection('inventory_logs').insertOne({ 
+                id: 'inv-' + uuidv4().slice(0, 8), 
+                productId: existing.id, 
+                productName: existing.name, 
+                type: 'bulk-update', 
+                qtyChange: stockDiff, 
+                before: oldStock, 
+                after: newStock, 
+                reason: 'Bulk CSV import (stock update)', 
+                createdAt: new Date().toISOString() 
+              });
+            }
+            results.updated++;
+          } else {
+            // Create new product
+            const id = 'p-' + uuidv4().slice(0, 8);
+            const product = {
+              id, name: raw.name,
+              slug: raw.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+              category: mainCat?.id || raw.category || 'medicines',
+              categoryId: mainCat?.id || null,
+              subcategoryId: subCat?.id || null,
+              brand: brandName,
+              brandId: brandCat?.id || null,
+              manufacturer: raw.manufacturer || '',
+              price, mrp,
+              packSize: raw.packSize || raw.pack_size || '',
+              image: images[0] || '', images,
+              stock: newStock,
+              prescription: String(raw.prescription || '').toLowerCase() === 'true' || raw.prescription === true,
+              rating: 4.5, ratingCount: 0, tags: [],
+              description: raw.description || '',
+              createdAt: new Date().toISOString(),
+            };
+            await db.collection('products').insertOne({ ...product });
+            if (newStock > 0) {
+              await db.collection('inventory_logs').insertOne({ id: 'inv-' + uuidv4().slice(0, 8), productId: id, productName: product.name, type: 'import', qtyChange: newStock, before: 0, after: newStock, reason: 'Bulk CSV import', createdAt: new Date().toISOString() });
+            }
+            results.created++;
           }
-          results.created++;
         } catch (e) { results.failed++; results.errors.push(e.message); }
       }
       return json(results);
