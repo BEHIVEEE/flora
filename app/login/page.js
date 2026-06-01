@@ -391,19 +391,44 @@ if (typeof window !== 'undefined' && !window.firebase) {
           },
         };
       },
-      RecaptchaVerifier: class RecaptchaVerifier {
-        constructor(containerId, options) {
-          this.containerId = containerId;
-          this.options = options;
-        }
-        render() {
-          return Promise.resolve('widget-id');
-        }
-        verify() {
-          return window.grecaptcha?.execute(this.options?.siteKey, { action: 'login' }) || Promise.resolve('');
-        }
+      RecaptchaVerifier: function(containerId, options) {
+        this.containerId = containerId;
+        this.options = options || {};
+        this._widgetId = null;
       },
     }),
+  };
+  
+  // Add render and verify methods to RecaptchaVerifier prototype
+  window.firebase.auth.RecaptchaVerifier.prototype.render = function() {
+    const self = this;
+    return new Promise((resolve) => {
+      if (window.grecaptcha && window.grecaptcha.render) {
+        try {
+          const container = document.getElementById(this.containerId);
+          if (container) {
+            this._widgetId = window.grecaptcha.render(this.containerId, {
+              sitekey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+              size: this.options?.size || 'invisible',
+            });
+          }
+        } catch (e) {
+          console.log('reCAPTCHA render error:', e);
+        }
+        resolve(this._widgetId || 'default');
+      } else {
+        resolve('default');
+      }
+    });
+  };
+  
+  window.firebase.auth.RecaptchaVerifier.prototype.verify = function() {
+    const firebaseKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+    if (this._widgetId !== null && window.grecaptcha) {
+      return window.grecaptcha.execute(this._widgetId);
+    }
+    // Fallback: execute with site key
+    return window.grecaptcha?.execute(firebaseKey, { action: 'login' }) || Promise.resolve('');
   };
 }
 
