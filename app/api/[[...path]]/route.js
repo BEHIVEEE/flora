@@ -953,6 +953,77 @@ export async function POST(req, { params }) {
     }
 
     // ============================================
+    // NEW: Firebase ID Token verification
+    // ============================================
+    if (path === 'auth/firebase-verify') {
+      const { idToken, phone } = body || {};
+      if (!idToken) {
+        return json({ ok: false, error: 'Missing ID token' }, 400);
+      }
+      
+      try {
+        // Verify the Firebase ID token
+        const firebaseKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+        const verifyRes = await fetch(
+          `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${firebaseKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken }),
+          }
+        );
+        
+        if (!verifyRes.ok) {
+          return json({ ok: false, error: 'Invalid token' }, 401);
+        }
+        
+        const verifyData = await verifyRes.json();
+        const userInfo = verifyData.users?.[0];
+        
+        if (!userInfo) {
+          return json({ ok: false, error: 'User not found' }, 404);
+        }
+        
+        // Find or create user in our database
+        const phoneClean = phone?.replace(/\D/g, '').slice(-10) || userInfo.phoneNumber?.replace(/\D/g, '').slice(-10);
+        
+        let user = await db.collection('users').findOne({ phone: phoneClean });
+        
+        if (!user) {
+          // Create new user
+          const newUser = {
+            id: 'u-' + uuidv4().slice(0, 8),
+            name: userInfo.displayName || '',
+            email: userInfo.email || '',
+            phone: phoneClean,
+            role: 'customer',
+            createdAt: new Date().toISOString(),
+          };
+          await db.collection('users').insertOne(newUser);
+          user = newUser;
+        }
+        
+        // Generate our JWT
+        const token = signToken({ uid: user.id, email: user.email, role: user.role });
+        
+        return json({
+          ok: true,
+          token,
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            role: user.role,
+          },
+        });
+      } catch (error) {
+        console.error('Firebase verify error:', error);
+        return json({ ok: false, error: error.message }, 500);
+      }
+    }
+
+    // ============================================
     // NEW: Link Account (requires auth)
     // ============================================
     if (path === 'auth/link-account') {
