@@ -2,7 +2,7 @@
 import { useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Lock, Mail, Eye, EyeOff, ArrowRight, Shield } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, ArrowRight, Shield, Phone, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,7 +20,14 @@ const LoginInner = () => {
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [loginMethod, setLoginMethod] = useState('email'); // 'email', 'google'
+  const [loginMethod, setLoginMethod] = useState('email'); // 'email', 'google', 'otp'
+  
+  // OTP state
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState('');
 
   const submit = async (e) => {
     e.preventDefault();
@@ -34,6 +41,64 @@ const LoginInner = () => {
     finally { setLoading(false); }
   };
 
+  const sendOTP = async () => {
+    if (!phone || phone.length !== 10) {
+      toast.error('Enter a valid 10-digit phone number');
+      return;
+    }
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setOtpSent(true);
+        toast.success('OTP sent to your phone');
+      } else {
+        setOtpError(data.error || 'Failed to send OTP');
+        toast.error(data.error || 'Failed to send OTP');
+      }
+    } catch (err) {
+      setOtpError('Network error');
+      toast.error('Network error');
+    }
+    setOtpLoading(false);
+  };
+
+  const verifyOTP = async () => {
+    if (!otp || otp.length !== 6) {
+      toast.error('Enter the 6-digit OTP');
+      return;
+    }
+    setOtpLoading(true);
+    try {
+      const res = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp }),
+      });
+      const data = await res.json();
+      if (data.ok && data.token) {
+        localStorage.setItem('cs_token', data.token);
+        localStorage.setItem('cs_user', JSON.stringify(data.user));
+        toast.success('Logged in successfully!');
+        if (data.user?.role === 'admin') router.replace('/admin');
+        else router.replace(next || '/');
+      } else {
+        setOtpError(data.error || 'Invalid OTP');
+        toast.error(data.error || 'Invalid OTP');
+      }
+    } catch (err) {
+      setOtpError('Verification failed');
+      toast.error('Verification failed');
+    }
+    setOtpLoading(false);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12 bg-gradient-to-br from-teal-50 via-white to-emerald-50">
       <div className="w-full max-w-md">
@@ -45,10 +110,10 @@ const LoginInner = () => {
         <div className="bg-white border border-slate-200 rounded-2xl p-6 md:p-7 shadow-lift">
           {/* Login method tabs */}
           <div className="flex gap-2 mb-6 border-b border-slate-200">
-            {['email', 'google'].map((method) => (
+            {['email', 'otp', 'google'].map((method) => (
               <button
                 key={method}
-                onClick={() => setLoginMethod(method)}
+                onClick={() => { setLoginMethod(method); setOtpSent(false); setOtpError(''); }}
                 className={`pb-3 px-2 text-sm font-bold transition-colors ${
                   loginMethod === method
                     ? 'text-teal-700 border-b-2 border-teal-700'
@@ -56,6 +121,7 @@ const LoginInner = () => {
                 }`}
               >
                 {method === 'email' && 'Email'}
+                {method === 'otp' && 'Phone OTP'}
                 {method === 'google' && 'Google'}
               </button>
             ))}
@@ -88,6 +154,78 @@ const LoginInner = () => {
 
           {/* Google login */}
           {loginMethod === 'google' && <GoogleLoginButton />}
+
+          {/* OTP login */}
+          {loginMethod === 'otp' && (
+            <div className="space-y-4">
+              {!otpSent ? (
+                <>
+                  <div>
+                    <Label className="text-xs font-semibold text-slate-700">Phone Number</Label>
+                    <div className="relative mt-1.5">
+                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Input 
+                        value={phone} 
+                        onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} 
+                        type="tel" 
+                        required 
+                        placeholder="9876543210" 
+                        className="pl-9 h-11 rounded-xl" 
+                      />
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">Enter 10-digit mobile number</p>
+                  </div>
+                  <Button 
+                    type="button" 
+                    onClick={sendOTP} 
+                    disabled={otpLoading || phone.length !== 10}
+                    className="w-full bg-teal-600 hover:bg-teal-700 text-white h-11 rounded-full font-bold"
+                  >
+                    {otpLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    Send OTP
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div className="text-center text-sm text-slate-600 mb-2">
+                    OTP sent to <span className="font-bold">+91 {phone}</span>
+                    <button type="button" onClick={() => setOtpSent(false)} className="ml-2 text-teal-700 font-bold text-xs">(Change)</button>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold text-slate-700">Enter OTP</Label>
+                    <div className="relative mt-1.5">
+                      <Input 
+                        value={otp} 
+                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} 
+                        type="tel" 
+                        required 
+                        placeholder="123456" 
+                        className="pl-3 h-11 rounded-xl text-center text-lg tracking-widest font-mono" 
+                      />
+                    </div>
+                    {otpError && <p className="text-xs text-rose-600 mt-1">{otpError}</p>}
+                  </div>
+                  <Button 
+                    type="button" 
+                    onClick={verifyOTP} 
+                    disabled={otpLoading || otp.length !== 6}
+                    className="w-full bg-teal-600 hover:bg-teal-700 text-white h-11 rounded-full font-bold"
+                  >
+                    {otpLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    Verify & Login
+                  </Button>
+                  <button 
+                    type="button" 
+                    onClick={sendOTP} 
+                    disabled={otpLoading}
+                    className="w-full text-sm text-teal-700 font-bold hover:text-teal-800"
+                  >
+                    Resend OTP
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           <div className="mt-4 text-center text-sm text-slate-600">
             New to ChemistShop? <Link href={`/signup${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="font-bold text-teal-700 hover:text-teal-800">Create an account</Link>
