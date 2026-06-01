@@ -117,11 +117,11 @@ const DEFAULT_SETTINGS = {
   id: 'main',
   shopName: 'FloraChemist', tagline: 'Apka Apna Chemist',
   contactPhone: '1800-XXX-XXXX', contactEmail: 'care@chemistshop.top',
-  address: 'Thane, Maharashtra, India',
+  address: 'Dombivli, Maharashtra, India',
   deliveryCharge: 49, freeDeliveryAbove: 499, minOrderValue: 99,
   businessHours: { open: '09:00', close: '21:00' },
   slotsEnabled: true,
-  shopLat: 19.2183, shopLng: 72.9781, deliveryRadiusKm: 10,
+  shopLat: 19.2183, shopLng: 73.0197, deliveryRadiusKm: 10,
   updatedAt: new Date().toISOString(),
 };
 const DEFAULT_SLOTS = [
