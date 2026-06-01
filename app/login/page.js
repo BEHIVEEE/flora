@@ -31,40 +31,62 @@ const LoginInner = () => {
   const recaptchaRef = useRef(null);
   const [recaptchaLoaded, setRecaptchaLoaded] = useState(false);
 
-  // Load and initialize reCAPTCHA when OTP tab is active
+  // Load Firebase SDK and initialize reCAPTCHA when OTP tab is active
   useEffect(() => {
     if (loginMethod !== 'otp') return;
     
-    const initRecaptcha = () => {
-      if (!window.grecaptcha || !recaptchaRef.current) return;
-      
-      // Render reCAPTCHA
-      try {
-        window.grecaptcha.render(recaptchaRef.current, {
-          sitekey: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
-          size: 'invisible',
-          callback: () => console.log('reCAPTCHA solved'),
-          'expired-callback': () => console.log('reCAPTCHA expired')
-        });
-        setRecaptchaLoaded(true);
-      } catch (e) {
-        console.log('reCAPTCHA render error:', e);
+    const initFirebase = async () => {
+      // Load Firebase SDK
+      if (!window.firebase) {
+        const script = document.createElement('script');
+        script.src = 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        script.async = true;
+        script.onload = () => {
+          const authScript = document.createElement('script');
+          authScript.src = 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+          authScript.async = true;
+          authScript.onload = () => {
+            initializeFirebase();
+          };
+          document.body.appendChild(authScript);
+        };
+        document.body.appendChild(script);
+      } else {
+        initializeFirebase();
       }
     };
     
-    // Load script if not loaded
-    if (!document.getElementById('recaptcha-script')) {
-      const script = document.createElement('script');
-      script.id = 'recaptcha-script';
-      script.src = 'https://www.google.com/recaptcha/api.js?render=explicit';
-      script.async = true;
-      script.defer = true;
-      script.onload = initRecaptcha;
-      document.body.appendChild(script);
-    } else {
-      // Script already loaded, try to init
-      setTimeout(initRecaptcha, 500);
-    }
+    const initializeFirebase = () => {
+      try {
+        if (!window.firebase?.auth) {
+          window.firebase.initializeApp({
+            apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+            authDomain: 'florachemist-aa51a.firebaseapp.com',
+            projectId: 'florachemist-aa51a',
+          });
+        }
+        
+        // Load reCAPTCHA
+        if (!window.grecaptcha) {
+          const recaptchaScript = document.createElement('script');
+          recaptchaScript.src = 'https://www.google.com/recaptcha/api.js';
+          recaptchaScript.async = true;
+          recaptchaScript.defer = true;
+          recaptchaScript.onload = () => {
+            setRecaptchaLoaded(true);
+            console.log('Firebase and reCAPTCHA ready');
+          };
+          document.body.appendChild(recaptchaScript);
+        } else {
+          setRecaptchaLoaded(true);
+        }
+      } catch (e) {
+        console.log('Firebase init error:', e);
+        setRecaptchaLoaded(true); // Allow sending anyway
+      }
+    };
+    
+    initFirebase();
   }, [loginMethod]);
 
   const submit = async (e) => {
@@ -88,39 +110,30 @@ const LoginInner = () => {
     setOtpError('');
     
     try {
-      // Execute reCAPTCHA to get token
-      let recaptchaToken = '';
-      try {
-        if (window.grecaptcha && recaptchaRef.current) {
-          recaptchaToken = await window.grecaptcha.execute();
-        }
-      } catch (e) {
-        console.log('reCAPTCHA execute error:', e);
+      if (!window.firebase?.auth) {
+        throw new Error('Firebase not initialized');
       }
       
-      const res = await fetch('/api/auth/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, recaptchaToken }),
-      });
+      const auth = window.firebase.auth();
+      const phoneNumber = '+91' + phone;
       
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      // Create reCAPTCHA verifier
+      const appVerifier = new window.firebase.auth.RecaptchaVerifier('recaptcha-container', {
+        size: 'invisible',
+        callback: () => console.log('reCAPTCHA verified'),
+      }, auth);
       
-      const data = await res.json();
+      // Send OTP
+      const confirmationResult = await auth.signInWithPhoneNumber(phoneNumber, appVerifier);
       
-      if (data.ok) {
-        setOtpSent(true);
-        toast.success('OTP sent! Check your phone or Vercel logs.');
-      } else {
-        setOtpError(data.error || 'Failed to send OTP');
-        toast.error(data.error || 'Failed to send OTP');
-      }
+      // Store confirmation result for verification
+      window.confirmationResult = confirmationResult;
+      setOtpSent(true);
+      toast.success('OTP sent to your phone!');
     } catch (err) {
       console.error('OTP send error:', err);
-      setOtpError('Failed to send. Check console.');
-      toast.error('Failed to send OTP. Please try again.');
+      setOtpError(err.message || 'Failed to send OTP');
+      toast.error(err.message || 'Failed to send OTP');
     }
     
     setOtpLoading(false);
@@ -133,11 +146,24 @@ const LoginInner = () => {
     }
     setOtpLoading(true);
     try {
-      const res = await fetch('/api/auth/verify-otp', {
+      if (!window.confirmationResult) {
+        throw new Error('OTP session expired. Request new OTP.');
+      }
+      
+      // Verify OTP with Firebase
+      const result = await window.confirmationResult.confirm(otp);
+      const user = result.user;
+      
+      // Get ID token
+      const idToken = await user.getIdToken();
+      
+      // Send to backend to create session
+      const res = await fetch('/api/auth/firebase-verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp }),
+        body: JSON.stringify({ idToken, phone }),
       });
+      
       const data = await res.json();
       
       if (data.ok && data.token) {
@@ -147,13 +173,13 @@ const LoginInner = () => {
         if (data.user?.role === 'admin') router.replace('/admin');
         else router.replace(next || '/');
       } else {
-        setOtpError(data.error || 'Invalid OTP');
-        toast.error(data.error || 'Invalid OTP');
+        setOtpError(data.error || 'Login failed');
+        toast.error(data.error || 'Login failed');
       }
     } catch (err) {
       console.error('Verify error:', err);
-      setOtpError('Verification failed');
-      toast.error('Verification failed');
+      setOtpError(err.message || 'Verification failed');
+      toast.error(err.message || 'Verification failed');
     }
     setOtpLoading(false);
   };
@@ -235,8 +261,8 @@ const LoginInner = () => {
                     <p className="text-xs text-slate-500 mt-1">Enter 10-digit mobile number</p>
                   </div>
                   
-                  {/* reCAPTCHA container */}
-                  <div ref={recaptchaRef} style={{ position: 'absolute', left: '-9999px' }} />
+                  {/* reCAPTCHA container for Firebase */}
+                  <div id="recaptcha-container" style={{ position: 'absolute', left: '-9999px' }} />
                   
                   <Button 
                     type="button" 
