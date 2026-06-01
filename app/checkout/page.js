@@ -28,6 +28,7 @@ const CheckoutPage = () => {
   });
   const [slots, setSlots] = useState([]);
   const [slotId, setSlotId] = useState('');
+  const [deliveryMethod, setDeliveryMethod] = useState('home');
   const { location, loading: locLoading, error: locError, detect, distance, inRange, radiusKm, configured } = useDeliveryRange();
 
   // Load Razorpay checkout script once
@@ -83,7 +84,7 @@ const CheckoutPage = () => {
     return true;
   };
 
-  const orderPayload = () => ({ userId, items, address, payment, subtotal, discount: savings, deliveryFee, total, slotId: slotsEnabled ? slotId : null, slotDate: slotsEnabled ? slotDate : null });
+  const orderPayload = () => ({ userId, items, address: deliveryMethod === 'home' ? address : null, payment, subtotal, discount: savings, deliveryFee: deliveryMethod === 'home' ? deliveryFee : 0, total: deliveryMethod === 'home' ? total : subtotal, slotId: deliveryMethod === 'home' && slotsEnabled ? slotId : null, slotDate: deliveryMethod === 'home' && slotsEnabled ? slotDate : null, deliveryMethod });
 
   const placeOrderCOD = async () => {
     setPlacing(true);
@@ -148,11 +149,14 @@ const CheckoutPage = () => {
   };
 
   const placeOrder = async () => {
-    if (configured && inRange === false) {
-      toast.error(`Sorry, we don't deliver to your location. You're ${distance?.toFixed(1)} km away (max ${radiusKm} km).`);
-      return;
+    if (deliveryMethod === 'home') {
+      if (!validateAddress()) return;
+      if (configured && inRange === false) {
+        toast.error(`Sorry, we don't deliver to your location. You're ${distance?.toFixed(1)} km away (max ${radiusKm} km).`);
+        return;
+      }
+      if (slotsEnabled && !slotId) { toast.error('Please choose a delivery slot'); return; }
     }
-    if (slotsEnabled && !slotId) { toast.error('Please choose a delivery slot'); return; }
     if (payment === 'COD') await placeOrderCOD();
     else await placeOrderRazorpay();
   };
@@ -165,7 +169,35 @@ const CheckoutPage = () => {
 
         <div className="grid lg:grid-cols-[1fr_360px] gap-5 mt-6">
           <div className="space-y-4">
-            {/* Step 1: address */}
+            {/* Delivery Method */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-5">
+              <h3 className="font-bold text-slate-900 mb-4">How would you like to receive your order?</h3>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <button
+                  onClick={() => setDeliveryMethod('home')}
+                  className={`p-4 rounded-xl border-2 transition-all text-left ${deliveryMethod === 'home' ? 'border-teal-500 bg-teal-50/60 ring-2 ring-teal-100' : 'border-slate-200 hover:border-teal-300 bg-white'}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Truck className={`w-5 h-5 ${deliveryMethod === 'home' ? 'text-teal-700' : 'text-slate-500'}`} />
+                    <div className="font-bold text-slate-900">Home Delivery</div>
+                  </div>
+                  <div className="text-xs text-slate-500">Get it delivered to your doorstep</div>
+                </button>
+                <button
+                  onClick={() => setDeliveryMethod('pickup')}
+                  className={`p-4 rounded-xl border-2 transition-all text-left ${deliveryMethod === 'pickup' ? 'border-teal-500 bg-teal-50/60 ring-2 ring-teal-100' : 'border-slate-200 hover:border-teal-300 bg-white'}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <ShieldCheck className={`w-5 h-5 ${deliveryMethod === 'pickup' ? 'text-teal-700' : 'text-slate-500'}`} />
+                    <div className="font-bold text-slate-900">Store Pickup</div>
+                  </div>
+                  <div className="text-xs text-slate-500">Pick up from our store</div>
+                </button>
+              </div>
+            </div>
+
+            {/* Step 1: address (only for home delivery) */}
+            {deliveryMethod === 'home' && (
             <div className="bg-white rounded-2xl border border-slate-200 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2"><div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-sm">1</div><h3 className="font-bold text-slate-900">Delivery Address</h3></div>
@@ -223,9 +255,10 @@ const CheckoutPage = () => {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Step 2: delivery slot */}
-            {slotsEnabled && (
+            {deliveryMethod === 'home' && slotsEnabled && (
               <div className="bg-white rounded-2xl border border-slate-200 p-5">
                 <div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-sm">2</div><h3 className="font-bold text-slate-900">Choose Delivery Slot</h3></div>
                 <div className="mb-4">
@@ -264,9 +297,27 @@ const CheckoutPage = () => {
               </div>
             )}
 
-            {/* Step 3: payment */}
+            {/* Store Pickup Info */}
+            {deliveryMethod === 'pickup' && (
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 p-5">
+                <div className="flex items-start gap-3">
+                  <ShieldCheck className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="font-bold text-emerald-900 mb-2">Store Pickup Details</h3>
+                    <div className="space-y-1 text-sm text-emerald-800">
+                      <p>📍 <strong>Location:</strong> Thane, Maharashtra</p>
+                      <p>🕐 <strong>Hours:</strong> 9:00 AM - 9:00 PM (Daily)</p>
+                      <p>✅ <strong>Ready in:</strong> 2-4 hours after order confirmation</p>
+                    </div>
+                    <p className="text-xs text-emerald-700 mt-3">Please bring a valid ID and order confirmation when picking up.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2/3: payment */}
             <div className="bg-white rounded-2xl border border-slate-200 p-5">
-              <div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-sm">{slotsEnabled ? 3 : 2}</div><h3 className="font-bold text-slate-900">Payment Method</h3></div>
+              <div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-sm">{deliveryMethod === 'home' && slotsEnabled ? 3 : 2}</div><h3 className="font-bold text-slate-900">Payment Method</h3></div>
               <RadioGroup value={payment} onValueChange={setPayment} className="space-y-2">
                 {[
                   { id: 'UPI', label: 'UPI', sub: 'GPay, PhonePe, Paytm, BHIM', icon: Smartphone, badge: 'Instant' },
@@ -303,11 +354,12 @@ const CheckoutPage = () => {
               <div className="space-y-2 text-sm border-t border-slate-100 pt-3">
                 <Row k={`Subtotal (${totalQty})`} v={`₹${subtotal}`} />
                 <Row k="Savings" v={`- ₹${savings}`} good />
-                <Row k="Delivery" v={deliveryFee === 0 ? 'FREE' : `₹${deliveryFee}`} good={deliveryFee === 0} />
+                {deliveryMethod === 'home' && <Row k="Delivery" v={deliveryFee === 0 ? 'FREE' : `₹${deliveryFee}`} good={deliveryFee === 0} />}
+                {deliveryMethod === 'pickup' && <Row k="Delivery" v="FREE" good />}
                 <div className="border-t border-slate-100 my-2" />
-                <div className="flex items-center justify-between font-black text-base"><span>Total</span><span>₹{total}</span></div>
+                <div className="flex items-center justify-between font-black text-base"><span>Total</span><span>₹{deliveryMethod === 'home' ? total : subtotal}</span></div>
               </div>
-              <Button onClick={() => validateAddress() && placeOrder()} disabled={placing || (configured && inRange === false)} className="hidden md:flex w-full mt-5 bg-teal-600 hover:bg-teal-700 text-white h-12 rounded-full font-bold shadow-lift">{placing ? 'Placing order…' : (configured && inRange === false) ? 'Out of delivery range' : `Place Order · ₹${total}`}</Button>
+              <Button onClick={() => placeOrder()} disabled={placing || (deliveryMethod === 'home' && configured && inRange === false)} className="hidden md:flex w-full mt-5 bg-teal-600 hover:bg-teal-700 text-white h-12 rounded-full font-bold shadow-lift">{placing ? 'Placing order…' : (deliveryMethod === 'home' && configured && inRange === false) ? 'Out of delivery range' : `Place Order · ₹${deliveryMethod === 'home' ? total : subtotal}`}</Button>
               <div className="mt-4 text-[11px] text-slate-500 flex items-center justify-center gap-1.5"><ShieldCheck className="w-3 h-3 text-emerald-600" /> 100% secure · Easy returns · Authentic products</div>
             </div>
           </aside>
@@ -315,7 +367,7 @@ const CheckoutPage = () => {
       </div>
 
       <div className="md:hidden fixed bottom-16 left-0 right-0 z-30 bg-white border-t border-slate-200 p-3">
-        <Button onClick={() => validateAddress() && placeOrder()} disabled={placing || (configured && inRange === false)} className="w-full bg-teal-600 hover:bg-teal-700 text-white h-12 rounded-full font-bold">{placing ? 'Placing order…' : (configured && inRange === false) ? 'Out of delivery range' : `Place Order · ₹${total}`}</Button>
+        <Button onClick={() => placeOrder()} disabled={placing || (deliveryMethod === 'home' && configured && inRange === false)} className="w-full bg-teal-600 hover:bg-teal-700 text-white h-12 rounded-full font-bold">{placing ? 'Placing order…' : (deliveryMethod === 'home' && configured && inRange === false) ? 'Out of delivery range' : `Place Order · ₹${deliveryMethod === 'home' ? total : subtotal}`}</Button>
       </div>
     </div>
   );
