@@ -2,9 +2,11 @@
 import { useRef, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, Upload, FileText, Check, X, Download } from 'lucide-react';
+import { ChevronLeft, Upload, FileText, Check, X, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+
+const BATCH_SIZE = 500; // Process 500 products at a time to avoid timeouts
 
 const CSV_HEADERS = ['name', 'brand', 'category', 'subcategory', 'price', 'mrp', 'stock', 'packSize', 'description', 'prescription', 'imageUrl'];
 const SAMPLE = `name,brand,category,subcategory,price,mrp,stock,packSize,description,prescription,imageUrl
@@ -92,6 +94,7 @@ const Import = () => {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState(null);
   const [categories, setCategories] = useState([]);
+  const [progress, setProgress] = useState(null); // { current, total, currentBatch }
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(d => setCategories(d.categories || []));
@@ -150,12 +153,51 @@ const Import = () => {
     if (!parsed?.rows?.length) return;
     const valid = parsed.rows.filter(r => validate(r).length === 0);
     if (valid.length === 0) { toast.error('No valid rows to import'); return; }
+    
+    const totalBatches = Math.ceil(valid.length / BATCH_SIZE);
+    const totalProducts = valid.length;
+    let allResults = { created: 0, failed: 0, errors: [] };
+    
     setImporting(true);
-    const res = await fetch('/api/products/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ products: valid }) });
-    const d = await res.json();
-    setResult(d);
+    setProgress({ current: 0, total: totalProducts, currentBatch: 1, totalBatches });
+    
+    // Process in batches
+    for (let i = 0; i < valid.length; i += BATCH_SIZE) {
+      const batch = valid.slice(i, i + BATCH_SIZE);
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+      
+      setProgress({ 
+        current: Math.min(i + batch.length, totalProducts), 
+        total: totalProducts, 
+        currentBatch: batchNum,
+        totalBatches 
+      });
+      
+      try {
+        const res = await fetch('/api/products/bulk', { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify({ products: batch }) 
+        });
+        const d = await res.json();
+        allResults.created += d.created || 0;
+        allResults.failed += d.failed || 0;
+        if (d.errors?.length) allResults.errors.push(...d.errors);
+      } catch (err) {
+        allResults.failed += batch.length;
+        allResults.errors.push(`Batch ${batchNum} failed: ${err.message}`);
+      }
+      
+      // Small delay between batches to avoid overwhelming the server
+      if (i + BATCH_SIZE < valid.length) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+    
+    setResult(allResults);
+    setProgress(null);
     setImporting(false);
-    toast.success(`${d.created} products imported`);
+    toast.success(`${allResults.created} products imported`);
   };
 
   return (
@@ -164,7 +206,7 @@ const Import = () => {
         <Link href="/admin/products"><Button variant="ghost" size="icon" className="rounded-full"><ChevronLeft className="w-5 h-5" /></Button></Link>
         <div className="flex-1">
           <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Bulk Import Products</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Upload a CSV file to add many products at once.</p>
+          <p className="text-slate-500 text-sm mt-0.5">Upload a CSV file to add products. Supports up to 100,000+ products with batch processing.</p>
         </div>
         <Button variant="outline" onClick={downloadSample} className="rounded-full"><Download className="w-4 h-4 mr-1" /> Download Sample CSV</Button>
       </div>
@@ -190,10 +232,30 @@ const Import = () => {
                   <Check className="w-3 h-3" /> Distributor invoice format auto-detected · Mapped to Allopathic Medicines
                 </div>
               )}
+              {progress && (
+                <div className="mt-3 space-y-2">
+                  <div className="flex justify-between text-xs text-slate-600">
+                    <span>Batch {progress.currentBatch} of {progress.totalBatches}</span>
+                    <span>{progress.current} / {progress.total} products</span>
+                  </div>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-teal-600 transition-all duration-300" 
+                      style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => { setParsed(null); }} className="rounded-full">Reset</Button>
-              <Button onClick={submit} disabled={importing} className="bg-teal-600 hover:bg-teal-700 rounded-full font-semibold"><Check className="w-4 h-4 mr-1" /> {importing ? 'Importing…' : `Import ${parsed.rows.filter(r => validate(r).length === 0).length} products`}</Button>
+              <Button onClick={submit} disabled={importing} className="bg-teal-600 hover:bg-teal-700 rounded-full font-semibold">
+                {importing ? (
+                  <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Importing...</>
+                ) : (
+                  <><Check className="w-4 h-4 mr-1" /> Import {parsed.rows.filter(r => validate(r).length === 0).length} products</>
+                )}
+              </Button>
             </div>
           </div>
           <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
