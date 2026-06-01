@@ -31,13 +31,9 @@ const CheckoutPage = () => {
   const [deliveryMethod, setDeliveryMethod] = useState('home');
   const { location, loading: locLoading, error: locError, detect, distance, inRange, radiusKm, configured } = useDeliveryRange();
 
-  // Load Razorpay checkout script once
+  // PayU is loaded via form submission, no script needed
   useEffect(() => {
-    if (window.Razorpay) { setRzpLoaded(true); return; }
-    const s = document.createElement('script');
-    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    s.onload = () => setRzpLoaded(true);
-    document.body.appendChild(s);
+    setRzpLoaded(true);
   }, []);
   const deliveryFee = (subtotal || 0) >= freeDeliveryAbove ? 0 : deliveryCharge;
   const total = (subtotal || 0) + deliveryFee;
@@ -101,50 +97,55 @@ const CheckoutPage = () => {
     finally { setPlacing(false); }
   };
 
-  const placeOrderRazorpay = async () => {
+  const placeOrderPayU = async () => {
     if (!rzpLoaded) { toast.error('Payment gateway loading, please wait…'); return; }
     setPlacing(true);
     try {
-      const res = await fetch('/api/razorpay/create-order', {
+      const orderId = `FLC-${Date.now()}`;
+      const res = await fetch('/api/payu/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: total }),
+        body: JSON.stringify({
+          amount: Math.round(total * 100) / 100,
+          orderId,
+          email: address.email || 'customer@florachemist.online',
+          phone: address.phone,
+          name: address.name,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error || 'Could not initiate payment'); setPlacing(false); return; }
 
-      const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+      // Create hidden form and submit to PayU
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = data.payuUrl;
+      form.style.display = 'none';
+
+      const fields = {
+        key: data.merchantKey,
+        txnid: data.orderId,
         amount: data.amount,
-        currency: data.currency,
-        name: 'FloraChemist',
-        description: `Order · ${items.length} item${items.length > 1 ? 's' : ''}`,
-        order_id: data.orderId,
-        prefill: { name: address.name, contact: address.phone, email: address.email || '' },
-        theme: { color: '#0d9488' },
-        modal: { ondismiss: () => { toast.error('Payment cancelled'); setPlacing(false); } },
-        handler: async (response) => {
-          try {
-            const vRes = await fetch('/api/razorpay/verify-payment', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                orderData: orderPayload(),
-              }),
-            });
-            const vData = await vRes.json();
-            if (vData.ok) { clear(); toast.success('Payment successful! Order placed 🎉'); router.push(`/order-confirmed?id=${vData.order.id}`); }
-            else toast.error(vData.error || 'Payment verification failed');
-          } catch { toast.error('Verification error'); }
-          finally { setPlacing(false); }
-        },
+        productinfo: `Order · ${items.length} item${items.length > 1 ? 's' : ''}`,
+        firstname: data.name,
+        email: data.email,
+        phone: data.phone,
+        hash: data.hash,
+        surl: `${window.location.origin}/api/payu/success`,
+        furl: `${window.location.origin}/api/payu/failure`,
+        udf1: JSON.stringify(orderPayload()),
       };
-      const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', (e) => { toast.error(`Payment failed: ${e.error.description}`); setPlacing(false); });
-      rzp.open();
+
+      Object.keys(fields).forEach(key => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = fields[key];
+        form.appendChild(input);
+      });
+
+      document.body.appendChild(form);
+      form.submit();
     } catch { toast.error('Network error'); setPlacing(false); }
   };
 
@@ -158,7 +159,7 @@ const CheckoutPage = () => {
       if (slotsEnabled && !slotId) { toast.error('Please choose a delivery slot'); return; }
     }
     if (payment === 'COD') await placeOrderCOD();
-    else await placeOrderRazorpay();
+    else await placeOrderPayU();
   };
 
   return (
