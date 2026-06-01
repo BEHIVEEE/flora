@@ -121,6 +121,7 @@ const DEFAULT_SETTINGS = {
   deliveryCharge: 49, freeDeliveryAbove: 499, minOrderValue: 99,
   businessHours: { open: '09:00', close: '21:00' },
   slotsEnabled: true,
+  shopLat: 19.2183, shopLng: 72.9781, deliveryRadiusKm: 10,
   updatedAt: new Date().toISOString(),
 };
 const DEFAULT_SLOTS = [
