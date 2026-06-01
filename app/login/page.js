@@ -36,14 +36,14 @@ const LoginInner = () => {
     if (loginMethod !== 'otp') return;
     
     const initFirebase = async () => {
-      // Load Firebase SDK
+      // Load Firebase SDK (compat version for script tag compatibility)
       if (!window.firebase) {
         const script = document.createElement('script');
-        script.src = 'https://www.gstatic.com/firebasejs/10.0.0/firebase-app.js';
+        script.src = 'https://www.gstatic.com/firebasejs/10.0.0/firebase-compat/app.js';
         script.async = true;
         script.onload = () => {
           const authScript = document.createElement('script');
-          authScript.src = 'https://www.gstatic.com/firebasejs/10.0.0/firebase-auth.js';
+          authScript.src = 'https://www.gstatic.com/firebasejs/10.0.0/firebase-compat/auth.js';
           authScript.async = true;
           authScript.onload = () => {
             initializeFirebase();
