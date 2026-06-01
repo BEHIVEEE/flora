@@ -17,28 +17,55 @@ const QuickDeliveryCheck = () => {
     setResult(null);
     setDistance(null);
 
+    let latitude, longitude;
+
     try {
-      // Check if geolocation is available
-      if (!navigator.geolocation) {
-        toast.error('Geolocation not supported in your browser. Please use Chrome, Firefox, or Safari.');
-        setResult('error');
-        setLoading(false);
-        return;
-      }
-
-      const position = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          resolve,
-          reject,
-          {
-            timeout: 15000,
-            enableHighAccuracy: false,
-            maximumAge: 0,
+      // Try browser geolocation first
+      if (navigator.geolocation) {
+        try {
+          const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(
+              resolve,
+              reject,
+              {
+                timeout: 10000,
+                enableHighAccuracy: false,
+                maximumAge: 0,
+              }
+            );
+          });
+          latitude = position.coords.latitude;
+          longitude = position.coords.longitude;
+        } catch (geoError) {
+          // Geolocation failed, try IP-based fallback
+          console.log('Browser geolocation failed, trying IP-based location...');
+          try {
+            const ipRes = await fetch('https://ipapi.co/json/');
+            if (ipRes.ok) {
+              const ipData = await ipRes.json();
+              latitude = ipData.latitude;
+              longitude = ipData.longitude;
+              toast.info('📍 Using approximate location from your IP address');
+            } else {
+              throw new Error('IP geolocation failed');
+            }
+          } catch {
+            // Both failed, show error
+            throw geoError;
           }
-        );
-      });
-
-      const { latitude, longitude } = position.coords;
+        }
+      } else {
+        // No geolocation support, try IP fallback
+        const ipRes = await fetch('https://ipapi.co/json/');
+        if (ipRes.ok) {
+          const ipData = await ipRes.json();
+          latitude = ipData.latitude;
+          longitude = ipData.longitude;
+          toast.info('📍 Using approximate location from your IP address');
+        } else {
+          throw new Error('Geolocation not supported');
+        }
+      }
 
       const res = await fetch('/api/delivery-range', {
         method: 'POST',
@@ -72,17 +99,19 @@ const QuickDeliveryCheck = () => {
     } catch (error) {
       console.error('Geolocation error:', error);
       
+      // Show helpful message and suggest pincode fallback
       if (error.code === 1) {
-        toast.error('📍 Location access denied. Enable location in your browser settings to check delivery.');
+        toast.error('📍 Location access denied. Use pincode instead.');
       } else if (error.code === 2) {
-        toast.error('📍 Could not determine your location. Please check your GPS/WiFi and try again.');
+        toast.error('📍 Could not determine location. Try pincode or check WiFi.');
       } else if (error.code === 3) {
-        toast.error('📍 Location request timed out. Please try again with better signal.');
-      } else if (error.message?.includes('User denied')) {
-        toast.error('📍 You denied location access. Click the location icon in your address bar to allow it.');
+        toast.error('📍 Location request timed out. Try pincode instead.');
       } else {
-        toast.error('📍 Could not get your location. Try:\n1. Check browser location permission\n2. Use WiFi instead of mobile data\n3. Refresh the page');
+        toast.error('📍 Location detection unavailable. Use pincode instead.');
       }
+      
+      // Auto-show pincode entry as fallback
+      setShowManual(true);
       setResult('error');
     } finally {
       setLoading(false);
