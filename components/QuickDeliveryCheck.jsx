@@ -23,47 +23,73 @@ const QuickDeliveryCheck = () => {
       // Try browser geolocation first
       if (navigator.geolocation) {
         try {
-          const position = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(
-              resolve,
-              reject,
-              {
-                timeout: 10000,
-                enableHighAccuracy: false,
-                maximumAge: 0,
-              }
-            );
-          });
+          const position = await Promise.race([
+            new Promise((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(
+                resolve,
+                reject,
+                {
+                  timeout: 8000,
+                  enableHighAccuracy: false,
+                  maximumAge: 0,
+                }
+              );
+            }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Geolocation timeout')), 9000)
+            ),
+          ]);
           latitude = position.coords.latitude;
           longitude = position.coords.longitude;
+          console.log('✅ Browser geolocation successful:', { latitude, longitude });
         } catch (geoError) {
           // Geolocation failed, try IP-based fallback
-          console.log('Browser geolocation failed, trying IP-based location...');
+          console.log('⚠️ Browser geolocation failed:', geoError.message);
+          console.log('Trying IP-based location...');
           try {
-            const ipRes = await fetch('https://ipapi.co/json/');
+            const ipRes = await Promise.race([
+              fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(5000) }),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('IP geolocation timeout')), 6000)
+              ),
+            ]);
             if (ipRes.ok) {
               const ipData = await ipRes.json();
               latitude = ipData.latitude;
               longitude = ipData.longitude;
+              console.log('✅ IP geolocation successful:', { latitude, longitude });
               toast.info('📍 Using approximate location from your IP address');
             } else {
               throw new Error('IP geolocation failed');
             }
-          } catch {
-            // Both failed, show error
-            throw geoError;
+          } catch (ipError) {
+            console.log('⚠️ IP geolocation failed:', ipError.message);
+            // Both failed, show pincode option
+            throw new Error('Location detection unavailable');
           }
         }
       } else {
         // No geolocation support, try IP fallback
-        const ipRes = await fetch('https://ipapi.co/json/');
-        if (ipRes.ok) {
-          const ipData = await ipRes.json();
-          latitude = ipData.latitude;
-          longitude = ipData.longitude;
-          toast.info('📍 Using approximate location from your IP address');
-        } else {
-          throw new Error('Geolocation not supported');
+        console.log('Geolocation not supported, trying IP-based location...');
+        try {
+          const ipRes = await Promise.race([
+            fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(5000) }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('IP geolocation timeout')), 6000)
+            ),
+          ]);
+          if (ipRes.ok) {
+            const ipData = await ipRes.json();
+            latitude = ipData.latitude;
+            longitude = ipData.longitude;
+            console.log('✅ IP geolocation successful:', { latitude, longitude });
+            toast.info('📍 Using approximate location from your IP address');
+          } else {
+            throw new Error('IP geolocation failed');
+          }
+        } catch (ipError) {
+          console.log('⚠️ IP geolocation failed:', ipError.message);
+          throw new Error('Location detection unavailable');
         }
       }
 
