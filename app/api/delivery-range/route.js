@@ -35,7 +35,7 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Shop location not configured' }, { status: 503 });
     }
 
-    const distance = distanceKm(lat, lng, shopLat, shopLng);
+    const distance = distanceKm(latitude, longitude, shopLat, shopLng);
     const inRange = distance <= deliveryRadiusKm;
 
     return NextResponse.json({

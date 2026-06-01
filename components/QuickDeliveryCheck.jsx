@@ -137,17 +137,31 @@ const QuickDeliveryCheck = () => {
 
       const data = await res.json();
 
-      if (data.inRange) {
-        setResult('in-range');
-        setDistance(data.distance);
-        toast.success(`✅ We deliver to pincode ${manualPincode}! Distance: ${data.distance.toFixed(1)} km`);
+      if (!res.ok) {
+        toast.error(data.error || `Pincode ${manualPincode} not found. Try another pincode.`);
+        setResult('error');
+        setLoading(false);
+        return;
+      }
+
+      if (data.inRange !== undefined) {
+        if (data.inRange) {
+          setResult('in-range');
+          setDistance(data.distance);
+          toast.success(`✅ We deliver to pincode ${manualPincode}! Distance: ${data.distance.toFixed(1)} km`);
+        } else {
+          setResult('out-of-range');
+          setDistance(data.distance);
+          toast.error(`❌ We don't deliver to pincode ${manualPincode} yet. Distance: ${data.distance.toFixed(1)} km`);
+        }
       } else {
-        setResult('out-of-range');
-        setDistance(data.distance);
-        toast.error(`❌ We don't deliver to pincode ${manualPincode} yet. Distance: ${data.distance.toFixed(1)} km`);
+        toast.error('Invalid response. Please try again.');
+        setResult('error');
       }
     } catch (error) {
-      toast.error('Could not check pincode. Please try again.');
+      console.error('Pincode check error:', error);
+      toast.error('Network error. Check your connection and try again.');
+      setResult('error');
     } finally {
       setLoading(false);
     }
