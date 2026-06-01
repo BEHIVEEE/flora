@@ -31,25 +31,41 @@ const LoginInner = () => {
   const recaptchaRef = useRef(null);
   const [recaptchaLoaded, setRecaptchaLoaded] = useState(false);
 
-  // Load reCAPTCHA v2 script
+  // Load and initialize reCAPTCHA when OTP tab is active
   useEffect(() => {
-    if (document.getElementById('recaptcha-script')) {
-      setRecaptchaLoaded(true);
-      return;
-    }
+    if (loginMethod !== 'otp') return;
     
-    const script = document.createElement('script');
-    script.id = 'recaptcha-script';
-    script.src = 'https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoad&render=explicit';
-    script.async = true;
-    script.defer = true;
-    
-    window.onRecaptchaLoad = () => {
-      setRecaptchaLoaded(true);
+    const initRecaptcha = () => {
+      if (!window.grecaptcha || !recaptchaRef.current) return;
+      
+      // Render reCAPTCHA
+      try {
+        window.grecaptcha.render(recaptchaRef.current, {
+          sitekey: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+          size: 'invisible',
+          callback: () => console.log('reCAPTCHA solved'),
+          'expired-callback': () => console.log('reCAPTCHA expired')
+        });
+        setRecaptchaLoaded(true);
+      } catch (e) {
+        console.log('reCAPTCHA render error:', e);
+      }
     };
     
-    document.body.appendChild(script);
-  }, []);
+    // Load script if not loaded
+    if (!document.getElementById('recaptcha-script')) {
+      const script = document.createElement('script');
+      script.id = 'recaptcha-script';
+      script.src = 'https://www.google.com/recaptcha/api.js?render=explicit';
+      script.async = true;
+      script.defer = true;
+      script.onload = initRecaptcha;
+      document.body.appendChild(script);
+    } else {
+      // Script already loaded, try to init
+      setTimeout(initRecaptcha, 500);
+    }
+  }, [loginMethod]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -72,17 +88,14 @@ const LoginInner = () => {
     setOtpError('');
     
     try {
-      // Execute reCAPTCHA if available
+      // Execute reCAPTCHA to get token
       let recaptchaToken = '';
-      if (window.grecaptcha && recaptchaRef.current) {
-        recaptchaToken = window.grecaptcha.getResponse();
-        if (!recaptchaToken) {
-          // Trigger reCAPTCHA
-          window.grecaptcha.execute();
-          // Wait a bit for user to complete
-          await new Promise(r => setTimeout(r, 1000));
-          recaptchaToken = window.grecaptcha.getResponse();
+      try {
+        if (window.grecaptcha && recaptchaRef.current) {
+          recaptchaToken = await window.grecaptcha.execute();
         }
+      } catch (e) {
+        console.log('reCAPTCHA execute error:', e);
       }
       
       const res = await fetch('/api/auth/send-otp', {
@@ -90,19 +103,24 @@ const LoginInner = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, recaptchaToken }),
       });
+      
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      
       const data = await res.json();
       
       if (data.ok) {
         setOtpSent(true);
-        toast.success('OTP sent to your phone');
+        toast.success('OTP sent! Check your phone or Vercel logs.');
       } else {
         setOtpError(data.error || 'Failed to send OTP');
         toast.error(data.error || 'Failed to send OTP');
       }
     } catch (err) {
       console.error('OTP send error:', err);
-      setOtpError('Network error');
-      toast.error('Network error');
+      setOtpError('Failed to send. Check console.');
+      toast.error('Failed to send OTP. Please try again.');
     }
     
     setOtpLoading(false);
@@ -217,14 +235,8 @@ const LoginInner = () => {
                     <p className="text-xs text-slate-500 mt-1">Enter 10-digit mobile number</p>
                   </div>
                   
-                  {/* reCAPTCHA widget */}
-                  <div 
-                    ref={recaptchaRef}
-                    className="g-recaptcha"
-                    data-sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"
-                    data-size="invisible"
-                    data-callback="onRecaptchaSuccess"
-                  />
+                  {/* reCAPTCHA container */}
+                  <div ref={recaptchaRef} style={{ position: 'absolute', left: '-9999px' }} />
                   
                   <Button 
                     type="button" 
