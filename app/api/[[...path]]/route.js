@@ -115,7 +115,7 @@ async function requireRider(req, db) {
 
 const DEFAULT_SETTINGS = {
   id: 'main',
-  shopName: 'ChemistShop', tagline: 'Apka Apna Chemist',
+  shopName: 'FloraChemist', tagline: 'Apka Apna Chemist',
   contactPhone: '1800-XXX-XXXX', contactEmail: 'care@chemistshop.top',
   address: 'Thane, Maharashtra, India',
   deliveryCharge: 49, freeDeliveryAbove: 499, minOrderValue: 99,

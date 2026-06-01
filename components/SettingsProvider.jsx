@@ -2,7 +2,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 
 const DEFAULT_SETTINGS = {
-  shopName: 'ChemistShop',
+  shopName: 'FloraChemist',
   tagline: 'Apka Apna Chemist',
   contactPhone: '1800-XXX-XXXX',
   contactEmail: 'care@chemistshop.top',
