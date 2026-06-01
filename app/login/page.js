@@ -30,47 +30,9 @@ const LoginInner = () => {
   const [otpError, setOtpError] = useState('');
   const [confirmationResult, setConfirmationResult] = useState(null);
 
-  // Initialize Firebase Auth and RecaptchaVerifier
+  // Initialize reCAPTCHA when needed (lazy load)
   useEffect(() => {
-    const initRecaptcha = async () => {
-      if (window.grecaptcha && window.grecaptcha.render) {
-        // Already loaded
-        return;
-      }
-      
-      // Wait for recaptcha to load
-      const checkRecaptcha = setInterval(() => {
-        if (window.grecaptcha && window.grecaptcha.render) {
-          clearInterval(checkRecaptcha);
-          
-          // Create invisible reCAPTCHA verifier
-          if (!window.recaptchaVerifier) {
-            window.recaptchaVerifier = new window.firebase.auth.RecaptchaVerifier('otp-recaptcha', {
-              size: 'invisible',
-              callback: () => {
-                console.log('reCAPTCHA solved');
-              },
-              'expired-callback': () => {
-                console.log('reCAPTCHA expired');
-              }
-            });
-          }
-        }
-      }, 500);
-    };
-
-    // Load reCAPTCHA script
-    if (!document.getElementById('recaptcha-script')) {
-      const script = document.createElement('script');
-      script.id = 'recaptcha-script';
-      script.src = 'https://www.google.com/recaptcha/api.js?render=explicit';
-      script.async = true;
-      script.defer = true;
-      script.onload = initRecaptcha;
-      document.body.appendChild(script);
-    } else {
-      initRecaptcha();
-    }
+    // Only load if OTP tab is active - handled in sendOTP
   }, []);
 
   const submit = async (e) => {
@@ -94,12 +56,34 @@ const LoginInner = () => {
     setOtpError('');
     
     try {
+      // Load reCAPTCHA script if not loaded
+      if (!document.getElementById('recaptcha-script')) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.id = 'recaptcha-script';
+          script.src = 'https://www.google.com/recaptcha/api.js?render=explicit';
+          script.async = true;
+          script.defer = true;
+          script.onload = resolve;
+          script.onerror = reject;
+          document.body.appendChild(script);
+        });
+      }
+      
+      // Wait for grecaptcha to be ready
+      await new Promise(resolve => {
+        const check = setInterval(() => {
+          if (window.grecaptcha?.render) {
+            clearInterval(check);
+            resolve();
+          }
+        }, 100);
+      });
+      
       // Check if Firebase is available
       if (!window.firebase?.auth) {
         throw new Error('Firebase not loaded');
       }
-      
-      const auth = window.firebase.auth();
       
       // Ensure recaptcha verifier is ready
       if (!window.recaptchaVerifier) {
