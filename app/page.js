@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowRight, ShieldCheck, Truck, Stethoscope, Pill, HeartPulse, Bandage, Baby, Leaf, Sparkles, Activity, Star, Clock, Award, MessageCircle, Upload, Scissors, Bone, Wheat, Clipboard, Sun, Cat, BriefcaseMedical, ChevronDown, ChevronUp } from 'lucide-react';
 import ProductCard from '@/components/ProductCard';
 import ProductSkeleton from '@/components/ProductSkeleton';
+import QuickDeliveryCheck from '@/components/QuickDeliveryCheck';
 import { Button } from '@/components/ui/button';
 import { useSettings } from '@/components/SettingsProvider';
 
@@ -140,6 +141,30 @@ const Home = () => {
               </Link>
             );
           })}
+        </div>
+      </section>
+
+      {/* Need Medicines Quick */}
+      <section className="container max-w-7xl mx-auto px-4 py-10 md:py-16">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200 p-7 md:p-10">
+          <div className="absolute -right-20 -top-20 w-64 h-64 rounded-full bg-blue-200/20 blur-3xl" />
+          <div className="relative grid md:grid-cols-2 gap-8 items-center">
+            <div>
+              <h3 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Need Medicines Quick?</h3>
+              <p className="mt-2 text-slate-600 text-balance">Share your location to check if we deliver to your area. Fast doorstep delivery within 10 km radius.</p>
+              <QuickDeliveryCheck />
+            </div>
+            <div className="flex justify-center">
+              <svg className="w-full max-w-xs" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="100" cy="100" r="80" fill="#e0f2fe" stroke="#0284c7" strokeWidth="2" />
+                <circle cx="100" cy="100" r="60" fill="#cffafe" stroke="#0284c7" strokeWidth="1.5" opacity="0.5" />
+                <circle cx="100" cy="100" r="40" fill="#06b6d4" opacity="0.1" />
+                <circle cx="100" cy="100" r="6" fill="#0284c7" />
+                <path d="M100 100 L140 70" stroke="#0284c7" strokeWidth="2" strokeDasharray="4" />
+                <text x="145" y="75" fontSize="12" fill="#0284c7" fontWeight="bold">10 km</text>
+              </svg>
+            </div>
+          </div>
         </div>
       </section>
 
