@@ -100,27 +100,44 @@ const QuickDeliveryCheck = () => {
       });
 
       const data = await res.json();
+      console.log('Delivery range response:', { status: res.status, data });
 
-      if (data.inRange) {
-        setResult('in-range');
-        setDistance(data.distance);
-        toast.success(`✅ We deliver to your area! You're ${data.distance.toFixed(1)} km away.`);
+      if (!res.ok) {
+        console.error('API error:', data.error);
+        toast.error(data.error || 'Could not check delivery range. Use pincode instead.');
+        setShowManual(true);
+        setResult('error');
+        setLoading(false);
+        return;
+      }
+
+      if (data.inRange !== undefined && data.distance !== undefined) {
+        if (data.inRange) {
+          setResult('in-range');
+          setDistance(data.distance);
+          toast.success(`✅ We deliver to your area! You're ${data.distance.toFixed(1)} km away.`);
+        } else {
+          setResult('out-of-range');
+          setDistance(data.distance);
+          toast.error(`❌ Sorry, we don't deliver to your location yet. You're ${data.distance.toFixed(1)} km away.`);
+          
+          // Log out-of-range view for analytics
+          fetch('/api/analytics/out-of-range', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              lat: latitude,
+              lng: longitude,
+              distance: data.distance,
+              radiusKm: data.radiusKm,
+            }),
+          }).catch(() => {});
+        }
       } else {
-        setResult('out-of-range');
-        setDistance(data.distance);
-        toast.error(`❌ Sorry, we don't deliver to your location yet. You're ${data.distance.toFixed(1)} km away.`);
-        
-        // Log out-of-range view for analytics
-        fetch('/api/analytics/out-of-range', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            lat: latitude,
-            lng: longitude,
-            distance: data.distance,
-            radiusKm: data.radiusKm,
-          }),
-        }).catch(() => {});
+        console.error('Invalid response data:', data);
+        toast.error('Invalid response. Use pincode instead.');
+        setShowManual(true);
+        setResult('error');
       }
     } catch (error) {
       console.error('Geolocation error:', error);

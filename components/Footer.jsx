@@ -71,9 +71,9 @@ const Footer = () => {
             <h4 className="font-semibold text-slate-900 mb-3 text-sm">Help</h4>
             <ul className="space-y-2 text-sm text-slate-600">
               <li><Link href="/prescription" className="hover:text-teal-700">Upload Prescription</Link></li>
-              <li><a href="#" className="hover:text-teal-700">Returns & Refunds</a></li>
+              <li><Link href="/refund-policy" className="hover:text-teal-700">Refund & Replacement Policy</Link></li>
               <li><a href="#" className="hover:text-teal-700">FAQ</a></li>
-              <li><Link href="/privacy" className="hover:text-teal-700">Privacy Policy</Link></li>
+              <li><Link href="/privacy-policy" className="hover:text-teal-700">Privacy Policy</Link></li>
             </ul>
           </div>
         </div>
