@@ -13,7 +13,7 @@ import GoogleLoginButton from '@/components/GoogleLoginButton';
 const LoginInner = () => {
   const router = useRouter();
   const sp = useSearchParams();
-  const { login } = useAuth() || {};
+  const { login, refresh } = useAuth() || {};
   const next = sp.get('next');
   const hint = sp.get('hint');
   const [email, setEmail] = useState('');
@@ -101,6 +101,10 @@ const LoginInner = () => {
       if (data.ok && data.token) {
         localStorage.setItem('cs_token', data.token);
         localStorage.setItem('cs_user', JSON.stringify(data.user));
+        // Refresh global auth state so header shows profile immediately
+        if (typeof refresh === 'function') {
+          try { await refresh(); } catch {}
+        }
         toast.success('Logged in successfully!');
         if (data.user?.role === 'admin') router.replace('/admin');
         else router.replace(next || '/');

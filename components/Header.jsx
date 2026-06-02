@@ -4,6 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { Search, ShoppingCart, User, MapPin, Menu, X, Heart, FileText, Phone, LogOut, Package, LogIn, UserPlus, ShieldCheck, Bike } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -11,6 +12,7 @@ import { useCart } from './CartProvider';
 import { useAuth } from './AuthProvider';
 import { useSettings } from './SettingsProvider';
 import { useDeliveryRange } from '@/hooks/useDeliveryRange';
+import QuickDeliveryCheck from '@/components/QuickDeliveryCheck';
 
 const Header = () => {
   const router = useRouter();
@@ -24,6 +26,7 @@ const Header = () => {
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggest, setShowSuggest] = useState(false);
   const { location, distance, inRange, radiusKm, configured, detect } = useDeliveryRange();
+  const [showDeliveryDialog, setShowDeliveryDialog] = useState(false);
 
   useEffect(() => {
     fetch('/api/categories?tree=true').then(r => r.json()).then(d => setCategories(d.categories || []));
@@ -34,6 +37,18 @@ const Header = () => {
     window.addEventListener('scroll', onScroll);
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  // Auto-prompt delivery availability on first visit or when out of range
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('chemistshop_location');
+      const dismissed = localStorage.getItem('delivery_dialog_dismissed');
+      // Show if no saved location and not dismissed recently, or explicitly out of range
+      if ((!stored && !dismissed) || (configured && inRange === false)) {
+        setShowDeliveryDialog(true);
+      }
+    } catch { /* ignore */ }
+  }, [configured, inRange]);
 
   // Debounced autocomplete: fetch matching products as user types
   useEffect(() => {
@@ -79,10 +94,30 @@ const Header = () => {
                 )}
               </span>
             ) : (
-              <button onClick={detect} suppressHydrationWarning className="flex items-center gap-1 hover:underline"><MapPin className="w-3 h-3" /> Select delivery location</button>
+              <button onClick={() => setShowDeliveryDialog(true)} suppressHydrationWarning className="flex items-center gap-1 hover:underline"><MapPin className="w-3 h-3" /> Select delivery location</button>
             )}
             <span className="opacity-80">Free delivery on orders above ₹{freeDeliveryAbove}</span>
           </div>
+
+      {/* Delivery Availability Popup */}
+      <Dialog open={showDeliveryDialog} onOpenChange={(o) => {
+        setShowDeliveryDialog(o);
+        if (!o) try { localStorage.setItem('delivery_dialog_dismissed', '1'); } catch {}
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-black text-slate-900">Check delivery availability</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600">Tell us where to deliver. We’ll confirm if your area is within our delivery range.</p>
+            <QuickDeliveryCheck />
+            <div className="flex items-center justify-between pt-1">
+              <button onClick={() => { setShowDeliveryDialog(false); }} className="text-xs font-semibold text-slate-500 hover:text-slate-700">Maybe later</button>
+              <button onClick={() => { setShowDeliveryDialog(false); detect(); }} className="text-xs font-bold text-teal-700 hover:text-teal-800">Use my current location</button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
           <div className="flex items-center gap-4">
             <Link href="/prescription" className="hover:underline">Upload Prescription</Link>
             <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {contactPhone}</span>
