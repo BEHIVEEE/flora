@@ -87,6 +87,52 @@ function detectAndNormalize(parsed) {
   return { format: 'distributor', rows };
 }
 
+// Map many common header variants to our canonical field names
+const HEADER_ALIASES = {
+  // name
+  'name': 'name', 'product': 'name', 'product name': 'name', 'productname': 'name', 'item': 'name', 'item name': 'name', 'title': 'name',
+  // brand / manufacturer
+  'brand': 'brand', 'brand name': 'brand', 'mfg': 'brand', 'mfr': 'brand', 'manufacturer': 'manufacturer', 'company': 'brand',
+  // categories
+  'category': 'category', 'cat': 'category', 'maincategory': 'category', 'main category': 'category',
+  'subcategory': 'subcategory', 'sub category': 'subcategory', 'sub_category': 'subcategory', 'sub cat': 'subcategory',
+  // pricing
+  'price': 'price', 'sellingprice': 'price', 'selling price': 'price', 'sp': 'price',
+  'mrp': 'mrp', 'max retail price': 'mrp', 'mrp (rs)': 'mrp',
+  // stock
+  'stock': 'stock', 'qty': 'stock', 'quantity': 'stock', 'available': 'stock', 'inventory': 'stock', 'closing stock': 'stock',
+  // packaging
+  'packsize': 'packSize', 'pack size': 'packSize', 'pack_size': 'packSize', 'pack': 'packSize', 'ppack': 'packSize', 'packaging': 'packSize',
+  // description
+  'description': 'description', 'desc': 'description', 'details': 'description',
+  // prescription flag
+  'prescription': 'prescription', 'rx': 'prescription', 'requires prescription': 'prescription', 'isrx': 'prescription',
+  // image url
+  'image': 'imageUrl', 'imageurl': 'imageUrl', 'image url': 'imageUrl', 'img': 'imageUrl', 'photo': 'imageUrl', 'picture': 'imageUrl', 'image link': 'imageUrl',
+};
+
+function canonicalizeStandardRows(raw) {
+  if (!raw?.rows?.length) return [];
+  return raw.rows.map((row) => {
+    const out = {};
+    // Map keys case-insensitively using aliases
+    Object.entries(row).forEach(([k, v]) => {
+      const lk = String(k || '').trim().toLowerCase();
+      const dest = HEADER_ALIASES[lk] || lk;
+      if (dest) out[dest] = v;
+    });
+    // Fallbacks
+    if (!out.price && out.mrp) out.price = out.mrp; // if price missing, use mrp
+    if (typeof out.prescription !== 'undefined') {
+      const pv = String(out.prescription).trim().toLowerCase();
+      out.prescription = pv === 'true' || pv === 'yes' || pv === '1';
+    }
+    // Trim strings
+    CSV_HEADERS.forEach((h) => { if (out[h] && typeof out[h] === 'string') out[h] = out[h].trim(); });
+    return out;
+  });
+}
+
 const Import = () => {
   const router = useRouter();
   const fileRef = useRef(null);
@@ -100,22 +146,48 @@ const Import = () => {
     fetch('/api/categories').then(r => r.json()).then(d => setCategories(d.categories || []));
   }, []);
 
-  const handleFile = (f) => {
+  const handleFile = async (f) => {
     if (!f) return;
+    const isExcel = /\.(xlsx|xls)$/i.test(f.name);
+    if (isExcel) {
+      try {
+        const data = await f.arrayBuffer();
+        const XLSXLib = await import('xlsx');
+        const XLSX = XLSXLib?.default || XLSXLib;
+        const wb = XLSX.read(data, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rowsA = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+        const headers = (rowsA[0] || []).map(h => String(h || '').trim());
+        const rows = rowsA.slice(1).map((arr) => {
+          const obj = {};
+          headers.forEach((h, i) => { obj[h] = arr[i]; });
+          return obj;
+        });
+        const raw = { headers, rows };
+        const { format, rows: normRows } = detectAndNormalize(raw);
+        const finalRows = format === 'distributor' ? normRows : canonicalizeStandardRows(raw);
+        setParsed({ headers: CSV_HEADERS, rows: finalRows, format });
+        if (format === 'distributor') {
+          toast.success(`Detected distributor invoice format · ${finalRows.length} products mapped`);
+        } else {
+          toast.success(`Excel parsed · ${finalRows.length} rows`);
+        }
+      } catch (err) {
+        console.error('Excel parse error', err);
+        toast.error('Failed to read Excel file. Please upload CSV or a simpler Excel file.');
+      }
+      return;
+    }
+
+    // Fallback: CSV
     const reader = new FileReader();
     reader.onload = (e) => {
       const raw = parseCSV(e.target.result);
       const { format, rows } = detectAndNormalize(raw);
-      // Use the normalized rows for distributor format; otherwise keep raw rows.
-      setParsed({
-        headers: format === 'distributor'
-          ? ['name', 'brand', 'category', 'price', 'mrp', 'stock', 'packSize']
-          : raw.headers,
-        rows,
-        format,
-      });
+      const finalRows = format === 'distributor' ? rows : canonicalizeStandardRows(raw);
+      setParsed({ headers: CSV_HEADERS, rows: finalRows, format });
       if (format === 'distributor') {
-        toast.success(`Detected distributor invoice format · ${rows.length} products mapped`);
+        toast.success(`Detected distributor invoice format · ${finalRows.length} products mapped`);
       }
     };
     reader.readAsText(f);
@@ -134,10 +206,10 @@ const Import = () => {
   const validate = (row) => {
     const errors = [];
     if (!row.name) errors.push('Missing name');
-    if (!row.category) errors.push('Missing category');
-    else if (!findCat(row.category)) errors.push(`Unknown category: "${row.category}"`);
-    if (row.subcategory && !findCat(row.subcategory)) errors.push(`Unknown subcategory: "${row.subcategory}"`);
-    if (!row.price || isNaN(Number(row.price))) errors.push('Invalid price');
+    // Category is optional; server will fall back to existing IDs or default
+    if (!row.price && !row.mrp) errors.push('Missing price/MRP');
+    if (row.price && isNaN(Number(row.price))) errors.push('Invalid price');
+    if (row.mrp && isNaN(Number(row.mrp))) errors.push('Invalid MRP');
     if (row.stock !== '' && row.stock != null && isNaN(Number(row.stock))) errors.push('Invalid stock');
     return errors;
   };
@@ -214,10 +286,10 @@ const Import = () => {
       {!parsed && !result && (
         <div onClick={() => fileRef.current?.click()} className="bg-white border-2 border-dashed border-teal-300 hover:bg-teal-50/40 hover:border-teal-400 rounded-2xl p-12 text-center cursor-pointer transition-colors">
           <div className="w-16 h-16 mx-auto bg-teal-100 text-teal-700 rounded-2xl flex items-center justify-center mb-3"><Upload className="w-7 h-7" /></div>
-          <div className="font-bold text-slate-900 text-lg">Click to upload a CSV</div>
-          <div className="text-sm text-slate-500 mt-1">CSV columns: <code className="text-xs">{CSV_HEADERS.join(', ')}</code></div>
+          <div className="font-bold text-slate-900 text-lg">Click to upload a CSV or Excel</div>
+          <div className="text-sm text-slate-500 mt-1">Columns: <code className="text-xs">{CSV_HEADERS.join(', ')}</code> (case-insensitive)</div>
           <Button type="button" className="mt-4 bg-teal-600 hover:bg-teal-700 rounded-full font-semibold"><Upload className="w-4 h-4 mr-1" /> Choose File</Button>
-          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
+          <input ref={fileRef} type="file" accept=".csv,.xls,.xlsx" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
         </div>
       )}
 

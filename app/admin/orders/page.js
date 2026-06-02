@@ -78,9 +78,9 @@ const Orders = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {!orders && Array(8).fill(0).map((_, i) => <tr key={i}><td colSpan={8} className="px-5 py-4"><div className="h-8 skeleton rounded" /></td></tr>)}
+              {!orders && Array(8).fill(0).map((_, i) => <tr key={i}><td colSpan={9} className="px-5 py-4"><div className="h-8 skeleton rounded" /></td></tr>)}
               {orders?.length === 0 && (
-                <tr><td colSpan={8} className="px-5 py-16 text-center text-slate-500">
+                <tr><td colSpan={9} className="px-5 py-16 text-center text-slate-500">
                   <ShoppingBag className="w-10 h-10 mx-auto text-slate-300" />
                   <div className="mt-2 font-semibold text-slate-700">No orders found</div>
                 </td></tr>
