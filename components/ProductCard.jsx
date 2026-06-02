@@ -4,6 +4,7 @@ import { Star, Plus, Check } from 'lucide-react';
 import { useCart } from './CartProvider';
 import { toast } from 'sonner';
 import { useState } from 'react';
+import { cdn } from '@/lib/cdn-image';
 
 const ProductCard = ({ product, compact = false }) => {
   const { addItem, items } = useCart() || { addItem: () => {}, items: [] };
@@ -43,7 +44,7 @@ const ProductCard = ({ product, compact = false }) => {
       <div className="rounded-xl bg-slate-50 overflow-hidden mb-2 md:mb-3 relative w-full" style={{ paddingBottom: '100%', height: 0 }}>
         {product.image ? (
           <img
-            src={product.image}
+            src={cdn(product.image, { w: 600, h: 600 })}
             alt={product.name}
             loading="lazy"
             decoding="async"

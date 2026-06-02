@@ -5,6 +5,7 @@ import { ArrowRight, ShieldCheck, Truck, Stethoscope, Pill, HeartPulse, Bandage,
 import ProductCard from '@/components/ProductCard';
 import ProductSkeleton from '@/components/ProductSkeleton';
 import QuickDeliveryCheck from '@/components/QuickDeliveryCheck';
+import { cdn } from '@/lib/cdn-image';
 import { Button } from '@/components/ui/button';
 import { useSettings } from '@/components/SettingsProvider';
 
@@ -84,7 +85,7 @@ const Home = () => {
           </div>
           <div className="relative">
             <div className="relative aspect-[4/5] md:aspect-square rounded-3xl overflow-hidden shadow-lift">
-              <img src="https://images.unsplash.com/photo-1576602976047-174e57a47881?w=600&q=75" alt="FloraChemist online pharmacy - buy medicines online in India" className="w-full h-full object-cover" loading="lazy" decoding="async" />
+              <img src={cdn('https://images.unsplash.com/photo-1576602976047-174e57a47881?w=1200&q=90', { w: 1200, h: 1200 })} alt="FloraChemist online pharmacy - buy medicines online in India" className="w-full h-full object-cover" loading="lazy" decoding="async" />
               <div className="absolute inset-0 bg-gradient-to-t from-teal-900/30 via-transparent to-transparent" />
             </div>
             {/* Floating cards */}
@@ -188,7 +189,7 @@ const Home = () => {
               </div>
             </div>
             <div className="relative h-60 md:h-72">
-              <img src="https://images.unsplash.com/photo-1638202993928-7267aad84c31?w=500&q=75" alt="Licensed pharmacist reviewing prescription at FloraChemist online pharmacy" className="absolute inset-0 w-full h-full object-cover rounded-2xl shadow-lift" loading="lazy" decoding="async" />
+              <img src={cdn('https://images.unsplash.com/photo-1638202993928-7267aad84c31?w=1000&q=90', { w: 1000, h: 720 })} alt="Licensed pharmacist reviewing prescription at FloraChemist online pharmacy" className="absolute inset-0 w-full h-full object-cover rounded-2xl shadow-lift" loading="lazy" decoding="async" />
             </div>
           </div>
         </div>

@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { Search, ShoppingCart, User, MapPin, Menu, X, Heart, FileText, Phone, LogOut, Package, LogIn, UserPlus, ShieldCheck, Bike } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -12,7 +13,11 @@ import { useCart } from './CartProvider';
 import { useAuth } from './AuthProvider';
 import { useSettings } from './SettingsProvider';
 import { useDeliveryRange } from '@/hooks/useDeliveryRange';
-import QuickDeliveryCheck from '@/components/QuickDeliveryCheck';
+const QuickDeliveryCheck = dynamic(() => import('@/components/QuickDeliveryCheck'), {
+  ssr: false,
+  loading: () => <div className="py-6 text-sm text-slate-500">Loading delivery checker…</div>,
+});
+import { cdn } from '@/lib/cdn-image';
 
 const Header = () => {
   const router = useRouter();
@@ -43,9 +48,10 @@ const Header = () => {
     try {
       const stored = localStorage.getItem('chemistshop_location');
       const dismissed = localStorage.getItem('delivery_dialog_dismissed');
-      // Show if no saved location and not dismissed recently, or explicitly out of range
+      // Defer auto-open slightly to avoid impacting LCP
       if ((!stored && !dismissed) || (configured && inRange === false)) {
-        setShowDeliveryDialog(true);
+        const t = setTimeout(() => setShowDeliveryDialog(true), 1200);
+        return () => clearTimeout(t);
       }
     } catch { /* ignore */ }
   }, [configured, inRange]);
@@ -190,7 +196,7 @@ const Header = () => {
             <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-lift overflow-hidden z-50">
               {suggestions.map(p => (
                 <button key={p.id} type="button" onMouseDown={() => pickSuggestion(p)} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 text-left border-b border-slate-100 last:border-0">
-                  <img src={p.image} alt="" className="w-9 h-9 rounded-lg object-cover bg-slate-100 shrink-0" />
+                  <img src={cdn(p.image, { w: 120, h: 120 })} alt="" className="w-9 h-9 rounded-lg object-cover bg-slate-100 shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold text-slate-900 line-clamp-2 leading-snug">{p.name}</div>
                     <div className="text-[11px] text-slate-500 line-clamp-1">{p.brand}{p.packSize ? ' · ' + p.packSize : ''}</div>
