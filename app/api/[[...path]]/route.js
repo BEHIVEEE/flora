@@ -1923,7 +1923,13 @@ export async function DELETE(req, { params }) {
       return json({ ok: false, error: 'Prescriptions cannot be deleted. Use archive instead.' }, 403);
     }
     if (path.startsWith('addresses/')) { await db.collection('addresses').deleteOne({ id: path.replace('addresses/', '') }); return json({ ok: true }); }
-    if (path.startsWith('products/')) { await db.collection('products').deleteOne({ id: path.replace('products/', '') }); return json({ ok: true }); }
+    if (path.startsWith('products/')) { 
+      const id = path.replace('products/', '');
+      console.log('[DELETE] Attempting to delete product with id:', id);
+      const result = await db.collection('products').deleteOne({ id });
+      console.log('[DELETE] Delete result:', result);
+      return json({ ok: true, deleted: result.deletedCount });
+    }
     if (path.startsWith('slots/')) { await db.collection('slots').deleteOne({ id: path.replace('slots/', '') }); return json({ ok: true }); }
     if (path.startsWith('categories/')) {
       const admin = await requireAdmin(req, db);
