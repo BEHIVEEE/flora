@@ -48,9 +48,11 @@ function detectAndNormalize(parsed) {
   const has = (h) => headers.includes(h.toLowerCase());
 
   // ProductList.csv format detection (your specific file)
-  const isProductList = has('product name') && has('company') && has('totalstock') && has('packing') && has('mrp') && has('ptr');
+  // More lenient detection - check for key columns
+  const isProductList = has('product name') && has('company') && has('totalstock');
 
   if (isProductList) {
+    console.log('[IMPORT] Detected ProductList format, headers:', parsed.headers.slice(0,10));
     const catMap = {
       'allopathy': 'allopathic-medicines',
       'ayurvedic': 'ayurvedic-medicines',
@@ -67,6 +69,12 @@ function detectAndNormalize(parsed) {
         const price = mrp ? Math.max(1, Math.round(mrp * 0.9)) : Number(r.PTR) || 0; // MRP - 10%
         const catRaw = (r.Category || '').trim().toLowerCase();
         const catSlug = catMap[catRaw] || 'allopathic-medicines';
+        // Stock: prefer TotalStock, fallback to SQTY + SFQTY
+        let stock = Number(r.TotalStock) || 0;
+        if (!stock && (r.SQTY || r.SFQTY)) {
+          stock = (Number(r.SQTY) || 0) + (Number(r.SFQTY) || 0);
+        }
+        console.log('[IMPORT] Sample row stock:', r['Product Name'], 'TotalStock:', r.TotalStock, 'SQTY:', r.SQTY, 'SFQTY:', r.SFQTY, '=> stock:', stock);
         return {
           name: (r['Product Name'] || '').trim(),
           brand: (r.Company || '').trim() || 'Generic',
@@ -74,7 +82,7 @@ function detectAndNormalize(parsed) {
           subcategory: '',
           price,
           mrp,
-          stock: Number(r.TotalStock) || 0,
+          stock,
           packSize: (r.Packing || '').trim(),
           description: '',
           prescription: catRaw === 'allopathy' || catRaw === 'ayurvedic' ? 'true' : 'false',
