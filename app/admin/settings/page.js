@@ -104,9 +104,10 @@ const Settings = () => {
         </Card>
 
         <Card icon={Truck} title="Delivery & Pricing">
-          <div className="grid md:grid-cols-3 gap-3">
+          <div className="grid md:grid-cols-4 gap-3">
             <Field label="Delivery Charge (₹)" type="number" value={s.deliveryCharge} onChange={v => u('deliveryCharge', Number(v))} />
             <Field label="Free Delivery Above (₹)" type="number" value={s.freeDeliveryAbove} onChange={v => u('freeDeliveryAbove', Number(v))} />
+            <Field label="Pickup Fee (₹)" type="number" value={s.pickupFee ?? 0} onChange={v => u('pickupFee', Number(v))} />
             <Field label="Min Order Value (₹)" type="number" value={s.minOrderValue} onChange={v => u('minOrderValue', Number(v))} />
           </div>
         </Card>

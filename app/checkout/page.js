@@ -17,7 +17,7 @@ import AddressAutocomplete from '@/components/AddressAutocomplete';
 const CheckoutPage = () => {
   const router = useRouter();
   const { items, subtotal, savings, totalQty, clear, userId } = useCart() || {};
-  const { deliveryCharge, freeDeliveryAbove, slotsEnabled } = useSettings();
+  const { deliveryCharge, freeDeliveryAbove, pickupFee = 0, slotsEnabled } = useSettings();
   const [step, setStep] = useState(1);
   const [address, setAddress] = useState({ name: '', phone: '', email: '', line1: '', line2: '', city: 'Mumbai', state: 'Maharashtra', pincode: '', type: 'Home', lat: null, lng: null });
   const [payment, setPayment] = useState('COD');
@@ -35,7 +35,9 @@ const CheckoutPage = () => {
   useEffect(() => {
     setRzpLoaded(true);
   }, []);
-  const deliveryFee = (subtotal || 0) >= freeDeliveryAbove ? 0 : deliveryCharge;
+  const homeDeliveryFee = (subtotal || 0) >= freeDeliveryAbove ? 0 : deliveryCharge;
+  const pickupCharge = Number(pickupFee) || 0;
+  const deliveryFee = deliveryMethod === 'home' ? homeDeliveryFee : pickupCharge;
   const total = (subtotal || 0) + deliveryFee;
 
   // Auto-fill address from detected location
@@ -80,7 +82,7 @@ const CheckoutPage = () => {
     return true;
   };
 
-  const orderPayload = () => ({ userId, items, address: deliveryMethod === 'home' ? address : null, payment, subtotal, discount: savings, deliveryFee: deliveryMethod === 'home' ? deliveryFee : 0, total: deliveryMethod === 'home' ? total : subtotal, slotId: deliveryMethod === 'home' && slotsEnabled ? slotId : null, slotDate: deliveryMethod === 'home' && slotsEnabled ? slotDate : null, deliveryMethod });
+  const orderPayload = () => ({ userId, items, address: deliveryMethod === 'home' ? address : null, payment, subtotal, discount: savings, deliveryFee, total, slotId: deliveryMethod === 'home' && slotsEnabled ? slotId : null, slotDate: deliveryMethod === 'home' && slotsEnabled ? slotDate : null, deliveryMethod });
 
   const placeOrderCOD = async () => {
     setPlacing(true);
@@ -322,8 +324,6 @@ const CheckoutPage = () => {
               <RadioGroup value={payment} onValueChange={setPayment} className="space-y-2">
                 {[
                   { id: 'UPI', label: 'UPI', sub: 'GPay, PhonePe, Paytm, BHIM', icon: Smartphone, badge: 'Instant' },
-                  { id: 'CARD', label: 'Credit / Debit Card', sub: 'Visa, Mastercard, RuPay, Amex', icon: CreditCard },
-                  { id: 'WALLET', label: 'Wallets', sub: 'Paytm, Mobikwik, Freecharge', icon: Wallet },
                   { id: 'COD', label: 'Cash on Delivery', sub: 'Pay when you receive your order', icon: Truck, badge: 'No charges' },
                 ].map(opt => (
                   <label key={opt.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${payment === opt.id ? 'border-teal-500 bg-teal-50/50 ring-2 ring-teal-100' : 'border-slate-200 hover:border-slate-300'}`}>
@@ -355,12 +355,11 @@ const CheckoutPage = () => {
               <div className="space-y-2 text-sm border-t border-slate-100 pt-3">
                 <Row k={`Subtotal (${totalQty})`} v={`₹${subtotal}`} />
                 <Row k="Savings" v={`- ₹${savings}`} good />
-                {deliveryMethod === 'home' && <Row k="Delivery" v={deliveryFee === 0 ? 'FREE' : `₹${deliveryFee}`} good={deliveryFee === 0} />}
-                {deliveryMethod === 'pickup' && <Row k="Delivery" v="FREE" good />}
+                <Row k={deliveryMethod === 'home' ? 'Delivery' : 'Pickup Fee'} v={deliveryFee === 0 ? 'FREE' : `₹${deliveryFee}`} good={deliveryFee === 0} />
                 <div className="border-t border-slate-100 my-2" />
-                <div className="flex items-center justify-between font-black text-base"><span>Total</span><span>₹{deliveryMethod === 'home' ? total : subtotal}</span></div>
+                <div className="flex items-center justify-between font-black text-base"><span>Total</span><span>₹{total}</span></div>
               </div>
-              <Button onClick={() => placeOrder()} disabled={placing || (deliveryMethod === 'home' && configured && inRange === false)} className="hidden md:flex w-full mt-5 bg-teal-600 hover:bg-teal-700 text-white h-12 rounded-full font-bold shadow-lift">{placing ? 'Placing order…' : (deliveryMethod === 'home' && configured && inRange === false) ? 'Out of delivery range' : `Place Order · ₹${deliveryMethod === 'home' ? total : subtotal}`}</Button>
+              <Button onClick={() => placeOrder()} disabled={placing || (deliveryMethod === 'home' && configured && inRange === false)} className="hidden md:flex w-full mt-5 bg-teal-600 hover:bg-teal-700 text-white h-12 rounded-full font-bold shadow-lift">{placing ? 'Placing order…' : (deliveryMethod === 'home' && configured && inRange === false) ? 'Out of delivery range' : `Place Order · ₹${total}`}</Button>
               <div className="mt-4 text-[11px] text-slate-500 flex items-center justify-center gap-1.5"><ShieldCheck className="w-3 h-3 text-emerald-600" /> 100% secure · Easy returns · Authentic products</div>
             </div>
           </aside>
@@ -368,7 +367,7 @@ const CheckoutPage = () => {
       </div>
 
       <div className="md:hidden fixed bottom-16 left-0 right-0 z-30 bg-white border-t border-slate-200 p-3">
-        <Button onClick={() => placeOrder()} disabled={placing || (deliveryMethod === 'home' && configured && inRange === false)} className="w-full bg-teal-600 hover:bg-teal-700 text-white h-12 rounded-full font-bold">{placing ? 'Placing order…' : (deliveryMethod === 'home' && configured && inRange === false) ? 'Out of delivery range' : `Place Order · ₹${deliveryMethod === 'home' ? total : subtotal}`}</Button>
+        <Button onClick={() => placeOrder()} disabled={placing || (deliveryMethod === 'home' && configured && inRange === false)} className="w-full bg-teal-600 hover:bg-teal-700 text-white h-12 rounded-full font-bold">{placing ? 'Placing order…' : (deliveryMethod === 'home' && configured && inRange === false) ? 'Out of delivery range' : `Place Order · ₹${total}`}</Button>
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ const DEFAULT_SETTINGS = {
   address: 'Thane, Maharashtra, India',
   deliveryCharge: 49,
   freeDeliveryAbove: 499,
+  pickupFee: 0,
   minOrderValue: 99,
   businessHours: { open: '09:00', close: '21:00' },
   slotsEnabled: true,
