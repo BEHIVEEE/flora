@@ -82,7 +82,7 @@ const CheckoutPage = () => {
     return true;
   };
 
-  const orderPayload = () => ({ userId, items, address: deliveryMethod === 'home' ? address : null, payment, subtotal, discount: savings, deliveryFee, total, slotId: deliveryMethod === 'home' && slotsEnabled ? slotId : null, slotDate: deliveryMethod === 'home' && slotsEnabled ? slotDate : null, deliveryMethod });
+  const orderPayload = () => ({ userId, items, address: deliveryMethod === 'home' ? address : null, payment, subtotal, discount: savings, deliveryFee, total, slotId: slotsEnabled ? slotId : null, slotDate: slotsEnabled ? slotDate : null, deliveryMethod });
 
   const placeOrderCOD = async () => {
     setPlacing(true);
@@ -158,8 +158,8 @@ const CheckoutPage = () => {
         toast.error(`Sorry, we don't deliver to your location. You're ${distance?.toFixed(1)} km away (max ${radiusKm} km).`);
         return;
       }
-      if (slotsEnabled && !slotId) { toast.error('Please choose a delivery slot'); return; }
     }
+    if ((deliveryMethod === 'home' || deliveryMethod === 'pickup') && slotsEnabled && !slotId) { toast.error(`Please choose a ${deliveryMethod === 'pickup' ? 'pickup' : 'delivery'} slot`); return; }
     if (payment === 'COD') await placeOrderCOD();
     else await placeOrderPayU();
   };
@@ -260,10 +260,10 @@ const CheckoutPage = () => {
             </div>
             )}
 
-            {/* Step 2: delivery slot */}
-            {deliveryMethod === 'home' && slotsEnabled && (
+            {/* Step 2: slot selection (home delivery or store pickup) */}
+            {(deliveryMethod === 'home' || deliveryMethod === 'pickup') && slotsEnabled && (
               <div className="bg-white rounded-2xl border border-slate-200 p-5">
-                <div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-sm">2</div><h3 className="font-bold text-slate-900">Choose Delivery Slot</h3></div>
+                <div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-sm">{deliveryMethod === 'home' ? 2 : 2}</div><h3 className="font-bold text-slate-900">{deliveryMethod === 'pickup' ? 'Choose Pickup Slot' : 'Choose Delivery Slot'}</h3></div>
                 <div className="mb-4">
                   <Label className="text-xs font-semibold text-slate-700">Delivery date</Label>
                   <div className="flex gap-2 mt-2 overflow-x-auto scrollbar-hide">
@@ -320,7 +320,7 @@ const CheckoutPage = () => {
 
             {/* Step 2/3: payment */}
             <div className="bg-white rounded-2xl border border-slate-200 p-5">
-              <div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-sm">{deliveryMethod === 'home' && slotsEnabled ? 3 : 2}</div><h3 className="font-bold text-slate-900">Payment Method</h3></div>
+              <div className="flex items-center gap-2 mb-4"><div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-sm">{deliveryMethod === 'home' ? (slotsEnabled ? 3 : 2) : (slotsEnabled ? 2 : 2)}</div><h3 className="font-bold text-slate-900">Payment Method</h3></div>
               <RadioGroup value={payment} onValueChange={setPayment} className="space-y-2">
                 {[
                   { id: 'UPI', label: 'UPI', sub: 'GPay, PhonePe, Paytm, BHIM', icon: Smartphone, badge: 'Instant' },
