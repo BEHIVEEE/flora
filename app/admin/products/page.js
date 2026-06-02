@@ -53,9 +53,10 @@ const ProductsList = () => {
 
   const del = async (id, name) => {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
-    await fetch(`/api/products/${id}`, { method: 'DELETE' });
-    toast.success('Product deleted');
-    load();
+    const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
+    const d = await res.json();
+    if (res.ok) { toast.success('Product deleted'); load(); }
+    else toast.error(d.error || 'Failed to delete');
   };
 
   const toggleSelect = (id) => {
@@ -90,7 +91,8 @@ const ProductsList = () => {
       }
     }
     
-    toast.success(`Deleted ${deleted} product${deleted > 1 ? 's' : ''}`);
+    if (deleted > 0) toast.success(`Deleted ${deleted} product${deleted > 1 ? 's' : ''}`);
+    if (deleted < ids.length) toast.error(`Failed to delete ${ids.length - deleted} products`);
     setSelected(new Set());
     setDeleting(false);
     load();
