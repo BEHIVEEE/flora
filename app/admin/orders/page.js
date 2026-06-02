@@ -19,6 +19,7 @@ const Orders = () => {
   const [orders, setOrders] = useState(null);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('all');
+  const [slots, setSlots] = useState([]);
 
   const load = () => {
     setOrders(null);
@@ -32,6 +33,7 @@ const Orders = () => {
   };
   useEffect(() => { load(); }, [status]);
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [search]);
+  useEffect(() => { fetch('/api/slots').then(r => r.json()).then(d => setSlots(d.slots || [])); }, []);
 
   const totals = orders ? {
     count: orders.length,
@@ -70,6 +72,7 @@ const Orders = () => {
                 <th className="text-left px-5 py-3 font-semibold">Items</th>
                 <th className="text-left px-5 py-3 font-semibold">Total</th>
                 <th className="text-left px-5 py-3 font-semibold">Payment</th>
+                <th className="text-left px-5 py-3 font-semibold">Slot</th>
                 <th className="text-left px-5 py-3 font-semibold">Status</th>
                 <th className="px-5 py-3"></th>
               </tr>
@@ -93,6 +96,16 @@ const Orders = () => {
                   <td className="px-5 py-3 text-slate-700">{o.items?.length || 0}</td>
                   <td className="px-5 py-3 font-bold text-slate-900">₹{o.total?.toLocaleString('en-IN')}</td>
                   <td className="px-5 py-3"><span className="text-[11px] bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded">{o.payment}</span></td>
+                  <td className="px-5 py-3 text-xs text-slate-700">
+                    {o.slotId ? (
+                      <div>
+                        <div className="font-semibold">{o.deliveryMethod === 'pickup' ? 'Pickup' : 'Delivery'}: {slots.find(s => s.id === o.slotId)?.label || o.slotId}</div>
+                        {o.slotDate && <div className="text-slate-500">{o.slotDate}</div>}
+                      </div>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
                   <td className="px-5 py-3"><span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${statusColors[o.status] || 'bg-slate-100 text-slate-700'}`}>{o.status}</span></td>
                   <td className="px-5 py-3 text-right">
                     <Link href={`/admin/orders/${o.id}`}><Button size="sm" variant="ghost" className="h-8 px-2 text-slate-600 hover:text-teal-700"><Eye className="w-4 h-4" /></Button></Link>

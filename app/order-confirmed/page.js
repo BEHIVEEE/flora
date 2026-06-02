@@ -9,8 +9,10 @@ const ConfirmedInner = () => {
   const sp = useSearchParams();
   const id = sp.get('id');
   const [order, setOrder] = useState(null);
+  const [slots, setSlots] = useState([]);
   useEffect(() => {
     if (id) fetch(`/api/orders/${id}`).then(r => r.json()).then(d => setOrder(d.order));
+    fetch('/api/slots').then(r => r.json()).then(d => setSlots(d.slots || []));
   }, [id]);
 
   return (
@@ -29,7 +31,17 @@ const ConfirmedInner = () => {
             </div>
             <div className="mt-2 text-sm text-slate-600">Estimated delivery: <span className="font-semibold text-slate-900">{new Date(order.estimatedDelivery).toDateString()}</span></div>
 
-            <div className="mt-8 grid grid-cols-4 gap-2 text-xs">
+            {order.slotId && (
+              <div className="mt-4 text-sm text-slate-700">
+                <div className="inline-flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                  <span className="font-semibold">{order.deliveryMethod === 'pickup' ? 'Pickup Slot' : 'Delivery Slot'}:</span>
+                  <span>{(slots.find(s => s.id === order.slotId)?.label) || 'Selected slot'}</span>
+                  {order.slotDate && <span className="text-xs text-slate-500">({order.slotDate})</span>}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6 grid grid-cols-4 gap-2 text-xs">
               {order.trackingSteps?.map((s, i) => (
                 <div key={i} className={`flex flex-col items-center gap-1.5 ${s.done ? 'text-emerald-600' : 'text-slate-400'}`}>
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${s.done ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100'}`}>
