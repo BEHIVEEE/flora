@@ -233,37 +233,69 @@ const Import = () => {
     setImporting(true);
     setProgress({ current: 0, total: totalProducts, currentBatch: 1, totalBatches });
     
+    // Helper to post a batch with retry and auto-splitting for large payloads or timeouts
+    const sendBatch = async (batch, depth = 0) => {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 25000); // 25s client-side timeout
+      try {
+        const res = await fetch('/api/products/bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ products: batch }),
+          signal: controller.signal,
+        });
+        clearTimeout(t);
+        if (!res.ok) {
+          // Entity too large or server cap reached: split batch
+          if ((res.status === 413 || res.status === 504 || res.status === 408) && batch.length > 25) {
+            const mid = Math.ceil(batch.length / 2);
+            const a = await sendBatch(batch.slice(0, mid), depth + 1);
+            const b = await sendBatch(batch.slice(mid), depth + 1);
+            return { created: (a.created || 0) + (b.created || 0), failed: (a.failed || 0) + (b.failed || 0), errors: [...(a.errors || []), ...(b.errors || [])] };
+          }
+          // For other non-OK statuses, try splitting once if still large
+          if (batch.length > 100) {
+            const mid = Math.ceil(batch.length / 2);
+            const a = await sendBatch(batch.slice(0, mid), depth + 1);
+            const b = await sendBatch(batch.slice(mid), depth + 1);
+            return { created: (a.created || 0) + (b.created || 0), failed: (a.failed || 0) + (b.failed || 0), errors: [...(a.errors || []), ...(b.errors || [])] };
+          }
+          const d = await res.json().catch(() => ({}));
+          return { created: d.created || 0, failed: (d.failed || 0) + batch.length, errors: [...(d.errors || []), `HTTP ${res.status}`] };
+        }
+        return await res.json();
+      } catch (err) {
+        clearTimeout(t);
+        // Network failure/timeout: split and retry if big enough
+        if (batch.length > 100) {
+          const mid = Math.ceil(batch.length / 2);
+          const a = await sendBatch(batch.slice(0, mid), depth + 1);
+          const b = await sendBatch(batch.slice(mid), depth + 1);
+          return { created: (a.created || 0) + (b.created || 0), failed: (a.failed || 0) + (b.failed || 0), errors: [...(a.errors || []), ...(b.errors || []), `Network: ${err?.message || 'Failed to fetch'}`] };
+        }
+        if (batch.length > 50) {
+          const mid = Math.ceil(batch.length / 2);
+          const a = await sendBatch(batch.slice(0, mid), depth + 1);
+          const b = await sendBatch(batch.slice(mid), depth + 1);
+          return { created: (a.created || 0) + (b.created || 0), failed: (a.failed || 0) + (b.failed || 0), errors: [...(a.errors || []), ...(b.errors || []), `Network: ${err?.message || 'Failed to fetch'}`] };
+        }
+        // Final small batch failed
+        return { created: 0, failed: batch.length, errors: [`Network: ${err?.message || 'Failed to fetch'}`] };
+      }
+    };
+
     // Process in batches
     for (let i = 0; i < valid.length; i += BATCH_SIZE) {
       const batch = valid.slice(i, i + BATCH_SIZE);
       const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-      
-      setProgress({ 
-        current: Math.min(i + batch.length, totalProducts), 
-        total: totalProducts, 
-        currentBatch: batchNum,
-        totalBatches 
-      });
-      
-      try {
-        const res = await fetch('/api/products/bulk', { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify({ products: batch }) 
-        });
-        const d = await res.json();
-        allResults.created += d.created || 0;
-        allResults.failed += d.failed || 0;
-        if (d.errors?.length) allResults.errors.push(...d.errors);
-      } catch (err) {
-        allResults.failed += batch.length;
-        allResults.errors.push(`Batch ${batchNum} failed: ${err.message}`);
-      }
-      
-      // Small delay between batches to avoid overwhelming the server
-      if (i + BATCH_SIZE < valid.length) {
-        await new Promise(r => setTimeout(r, 500));
-      }
+      setProgress({ current: Math.min(i + batch.length, totalProducts), total: totalProducts, currentBatch: batchNum, totalBatches });
+
+      const d = await sendBatch(batch);
+      allResults.created += d.created || 0;
+      allResults.failed += d.failed || 0;
+      if (d.errors?.length) allResults.errors.push(...d.errors.map(e => `Batch ${batchNum}: ${e}`));
+
+      if (i + BATCH_SIZE < valid.length) await new Promise(r => setTimeout(r, 400));
     }
     
     setResult(allResults);
