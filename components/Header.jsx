@@ -24,7 +24,7 @@ const Header = () => {
   const pathname = usePathname();
   const { totalQty } = useCart() || { totalQty: 0 };
   const { user, logout } = useAuth() || { user: null, logout: () => {} };
-  const { shopName, tagline, contactPhone, freeDeliveryAbove } = useSettings();
+  const { shopName, tagline, contactPhone, freeDeliveryAbove, logo } = useSettings();
   const [q, setQ] = useState('');
   const [scrolled, setScrolled] = useState(false);
   const [categories, setCategories] = useState([]);
@@ -141,7 +141,13 @@ const Header = () => {
           <SheetContent side="left" className="w-80 p-0">
             <div className="p-5 bg-gradient-to-br from-teal-600 to-emerald-600 text-white">
               <Link href="/" className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-white text-teal-700 rounded-xl flex items-center justify-center font-black text-xl">+</div>
+                {logo ? (
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center overflow-hidden">
+                    <img src={cdn(logo, { w: 80, h: 80, fit: 'contain' })} alt={shopName || 'Logo'} className="w-full h-full object-contain" />
+                  </div>
+                ) : (
+                  <div className="w-10 h-10 bg-white text-teal-700 rounded-xl flex items-center justify-center font-black text-xl">+</div>
+                )}
                 <div>
                   <div className="font-black text-lg leading-tight">{shopName}</div>
                   <div className="text-[11px] opacity-90 leading-none">{tagline}</div>
@@ -180,7 +186,13 @@ const Header = () => {
         </Sheet>
 
         <Link href="/" className="flex items-center gap-2 shrink-0">
-          <div className="w-10 h-10 bg-gradient-to-br from-teal-600 to-emerald-600 text-white rounded-xl flex items-center justify-center font-black text-2xl shadow-lift">+</div>
+          {logo ? (
+            <div className="w-10 h-10 rounded-xl bg-white border border-teal-100 flex items-center justify-center overflow-hidden shadow-lift">
+              <img src={cdn(logo, { w: 100, h: 100, fit: 'contain' })} alt={shopName || 'Logo'} className="w-full h-full object-contain" />
+            </div>
+          ) : (
+            <div className="w-10 h-10 bg-gradient-to-br from-teal-600 to-emerald-600 text-white rounded-xl flex items-center justify-center font-black text-2xl shadow-lift">+</div>
+          )}
           <div className="hidden sm:block">
             <div className="font-black text-[17px] leading-tight text-slate-900">{shopName}</div>
             <div className="text-[10px] text-teal-700 font-semibold leading-none tracking-wide">{tagline?.toUpperCase()}</div>
