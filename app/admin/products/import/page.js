@@ -6,7 +6,7 @@ import { ChevronLeft, Upload, FileText, Check, X, Download, Loader2 } from 'luci
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
-const BATCH_SIZE = 500; // Process 500 products at a time to avoid timeouts
+const BATCH_SIZE = 200; // Smaller batches to avoid serverless timeouts, especially on slow networks
 
 const CSV_HEADERS = ['name', 'brand', 'category', 'subcategory', 'price', 'mrp', 'stock', 'packSize', 'description', 'prescription', 'imageUrl'];
 const SAMPLE = `name,brand,category,subcategory,price,mrp,stock,packSize,description,prescription,imageUrl

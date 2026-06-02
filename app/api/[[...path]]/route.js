@@ -1283,8 +1283,9 @@ export async function POST(req, { params }) {
 
     // Bulk product import (with upsert - update existing or create new)
     if (path === 'products/bulk') {
-      const items = body.products || [];
+      const items = (body.products || []).slice(0, 200); // safety: cap batch to 200 per request
       const results = { created: 0, updated: 0, failed: 0, errors: [] };
+      const startTime = Date.now();
       // Pre-fetch all categories once for fast lookup
       const allCats = await db.collection('categories').find({}, { projection: { _id: 0 } }).toArray();
       const findCat = (val) => {
@@ -1381,10 +1382,11 @@ export async function POST(req, { params }) {
           }
           results.updated++;
         } catch (e) { results.failed++; results.errors.push(e.message); }
+        if (Date.now() - startTime > 18000) break; // 18s safety to avoid platform timeouts
       }
       
       // Bulk insert new products
-      if (toInsert.length > 0) {
+      if (toInsert.length > 0 && (Date.now() - startTime) <= 18000) {
         const newProducts = toInsert.map(({ raw, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat }) => {
           const id = 'p-' + uuidv4().slice(0, 8);
           return {
