@@ -367,30 +367,50 @@ export async function GET(req, { params }) {
       const limit = Math.min(parseInt(searchParams.get('limit') || '60', 10), 200);
       const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0);
       const sort = searchParams.get('sort') || 'popular';
-      const filter = {};
-      // Support both old string-based category and new ID-based filtering
+      const andConds = [];
+      // Category: match by id or legacy string (slug/name)
       if (categoryId) {
-        filter.$or = [
-          { categoryId },
+        const cat = await db.collection('categories').findOne({ id: categoryId }, { projection: { _id: 0, slug: 1, name: 1, id: 1 } });
+        const orCat = [
+          { categoryId: categoryId },
           { category: categoryId },
         ];
+        if (cat?.slug) orCat.push({ category: cat.slug });
+        if (cat?.name) orCat.push({ category: cat.name }, { category: { $regex: '^' + String(cat.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' } });
+        andConds.push({ $or: orCat });
       }
-      if (subcategoryId) filter.subcategoryId = subcategoryId;
-      if (brandId) filter.brandId = brandId;
-      if (brand) filter.brand = brand;
+      // Subcategory: match by id or legacy string (slug/name)
+      if (subcategoryId) {
+        const sub = await db.collection('categories').findOne({ id: subcategoryId }, { projection: { _id: 0, slug: 1, name: 1, id: 1 } });
+        const orSub = [ { subcategoryId } ];
+        if (sub?.slug) orSub.push({ subcategory: sub.slug });
+        if (sub?.name) orSub.push({ subcategory: sub.name }, { subcategory: { $regex: '^' + String(sub.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' } });
+        andConds.push({ $or: orSub });
+      }
+      // Brand: match by id or name
+      if (brandId) {
+        const b = await db.collection('categories').findOne({ id: brandId }, { projection: { _id: 0, name: 1, id: 1 } });
+        const orBrand = [ { brandId } ];
+        if (b?.name) orBrand.push({ brand: b.name }, { brand: { $regex: '^' + String(b.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' } });
+        andConds.push({ $or: orBrand });
+      }
+      if (brand) andConds.push({ brand });
+
       // Search: use text index for >=3 chars (fast at 100k+); fall back to prefix regex for short queries
       let projection = { _id: 0 };
       let sortObj = { ratingCount: -1 };
       if (search) {
         const s = search.trim();
         if (s.length >= 3) {
-          filter.$text = { $search: s };
+          andConds.push({ $text: { $search: s } });
           projection = { _id: 0, _score: { $meta: 'textScore' } };
           sortObj = { _score: { $meta: 'textScore' } };
         } else {
-          filter.name = { $regex: '^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+          andConds.push({ name: { $regex: '^' + s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } });
         }
       }
+
+      const filter = andConds.length ? { $and: andConds } : {};
       if (sort === 'price_asc') sortObj = { price: 1 };
       if (sort === 'price_desc') sortObj = { price: -1 };
       if (sort === 'rating') sortObj = { rating: -1 };
