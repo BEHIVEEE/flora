@@ -62,8 +62,8 @@ function detectAndNormalize(parsed) {
       'babycare': 'baby-care-products',
       'nutrition': 'nutrition-supplements',
       'fmcg': 'fmcg-products',
-      'generic': 'generic-medicines',
-      'generic medicines': 'generic-medicines',
+      'generic': 'generic',
+      'generic medicines': 'generic',
     };
     const rows = parsed.rows
       .filter(r => toStr(r['Product Name']))
