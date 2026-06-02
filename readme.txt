@@ -1,0 +1,3 @@
+REPLACE YOUR API KEY IN 'send-otp.php'
+
+LINE NUMBER 5
