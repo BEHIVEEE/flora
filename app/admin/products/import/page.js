@@ -341,7 +341,7 @@ const Import = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {parsed.rows.map((r, idx) => {
+                  {parsed.rows.slice(0, 100).map((r, idx) => {
                     const errs = validate(r);
                     return (
                       <tr key={idx} className={errs.length ? 'bg-rose-50/30' : ''}>
@@ -357,6 +357,9 @@ const Import = () => {
                       </tr>
                     );
                   })}
+                  {parsed.rows.length > 100 && (
+                    <tr><td colSpan={CSV_HEADERS.length + 2} className="px-4 py-3 text-center text-xs text-slate-500">Showing first 100 of {parsed.rows.length} rows · Import will process all rows</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
