@@ -1358,6 +1358,9 @@ export async function POST(req, { params }) {
       for (const raw of items) {
         try {
           if (!raw.name) { results.failed++; results.errors.push('Missing name'); continue; }
+          if (String(raw.name).length > 300) { results.failed++; results.errors.push('Name too long'); continue; }
+          if (raw.description && String(raw.description).length > 5000) { results.failed++; results.errors.push('Description too long'); continue; }
+          if (raw.images && !Array.isArray(raw.images) && typeof raw.images !== 'string') { results.failed++; results.errors.push('Invalid images field'); continue; }
           const rawImages = raw.images || (raw.imageUrl ? [raw.imageUrl] : (raw.image ? [raw.image] : []));
           const images = sanitizeImages(rawImages);
 
@@ -1444,8 +1447,8 @@ export async function POST(req, { params }) {
         });
         
         try {
-          await db.collection('products').insertMany(newProducts);
-          results.created = newProducts.length;
+          const r = await db.collection('products').insertMany(newProducts, { ordered: false });
+          results.created = (r?.insertedCount != null ? r.insertedCount : newProducts.length);
           
           // Log inventory for new products with stock
           const logsToInsert = newProducts.filter(p => p.stock > 0).map(p => ({
@@ -1463,8 +1466,10 @@ export async function POST(req, { params }) {
             await db.collection('inventory_logs').insertMany(logsToInsert);
           }
         } catch (e) { 
-          results.failed += toInsert.length; 
-          results.errors.push('Bulk insert failed: ' + e.message); 
+          // Continue on duplicate key or validation errors; count as failed
+          const failed = toInsert.length - (e?.result?.nInserted || 0);
+          results.failed += failed > 0 ? failed : toInsert.length; 
+          results.errors.push('Bulk insert partial failure: ' + (e?.errmsg || e?.message || 'unknown'));
         }
       }
       

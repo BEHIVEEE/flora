@@ -6,7 +6,7 @@ import { ChevronLeft, Upload, FileText, Check, X, Download, Loader2 } from 'luci
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
-const BATCH_SIZE = 200; // Smaller batches to avoid serverless timeouts, especially on slow networks
+const BATCH_SIZE = 100; // Smaller batches to avoid serverless timeouts, especially on slow networks
 
 const CSV_HEADERS = ['name', 'brand', 'category', 'subcategory', 'price', 'mrp', 'stock', 'packSize', 'description', 'prescription', 'imageUrl'];
 const SAMPLE = `name,brand,category,subcategory,price,mrp,stock,packSize,description,prescription,imageUrl
@@ -101,6 +101,9 @@ const HEADER_ALIASES = {
   'mrp': 'mrp', 'max retail price': 'mrp', 'mrp (rs)': 'mrp',
   // stock
   'stock': 'stock', 'qty': 'stock', 'quantity': 'stock', 'available': 'stock', 'inventory': 'stock', 'closing stock': 'stock',
+  'totalstock': 'stock', 'total stock': 'stock',
+  // distributor-style split quantities (we'll sum them later)
+  'sqty': '__sqty', 's qty': '__sqty', 'sfqty': '__sfqty', 'sf qty': '__sfqty', 'freeqty': '__sfqty', 'free qty': '__sfqty',
   // packaging
   'packsize': 'packSize', 'pack size': 'packSize', 'pack_size': 'packSize', 'pack': 'packSize', 'ppack': 'packSize', 'packaging': 'packSize',
   // description
@@ -127,6 +130,12 @@ function canonicalizeStandardRows(raw) {
       const pv = String(out.prescription).trim().toLowerCase();
       out.prescription = pv === 'true' || pv === 'yes' || pv === '1';
     }
+    // Aggregate SQty + SFree if explicit stock not provided
+    if ((out.stock === undefined || out.stock === '' || Number(out.stock) === 0) && (out.__sqty || out.__sfqty)) {
+      const s = (Number(out.__sqty) || 0) + (Number(out.__sfqty) || 0);
+      if (s) out.stock = s;
+    }
+    delete out.__sqty; delete out.__sfqty;
     // Trim strings
     CSV_HEADERS.forEach((h) => { if (out[h] && typeof out[h] === 'string') out[h] = out[h].trim(); });
     return out;
