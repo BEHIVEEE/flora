@@ -211,10 +211,12 @@ const Import = () => {
         });
         const raw = { headers, rows };
         const { format, rows: normRows } = detectAndNormalize(raw);
-        const finalRows = format === 'distributor' ? normRows : canonicalizeStandardRows(raw);
+        const finalRows = (format === 'distributor' || format === 'productlist') ? normRows : canonicalizeStandardRows(raw);
         setParsed({ headers: CSV_HEADERS, rows: finalRows, format });
         if (format === 'distributor') {
           toast.success(`Detected distributor invoice format · ${finalRows.length} products mapped`);
+        } else if (format === 'productlist') {
+          toast.success(`Detected ProductList format · ${finalRows.length} products mapped`);
         } else {
           toast.success(`Excel parsed · ${finalRows.length} rows`);
         }
@@ -230,10 +232,12 @@ const Import = () => {
     reader.onload = (e) => {
       const raw = parseCSV(e.target.result);
       const { format, rows } = detectAndNormalize(raw);
-      const finalRows = format === 'distributor' ? rows : canonicalizeStandardRows(raw);
+      const finalRows = (format === 'distributor' || format === 'productlist') ? rows : canonicalizeStandardRows(raw);
       setParsed({ headers: CSV_HEADERS, rows: finalRows, format });
       if (format === 'distributor') {
         toast.success(`Detected distributor invoice format · ${finalRows.length} products mapped`);
+      } else if (format === 'productlist') {
+        toast.success(`Detected ProductList format · ${finalRows.length} products mapped`);
       }
     };
     reader.readAsText(f);
