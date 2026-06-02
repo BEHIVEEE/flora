@@ -47,6 +47,43 @@ function detectAndNormalize(parsed) {
   const headers = parsed.headers.map(h => h.toLowerCase());
   const has = (h) => headers.includes(h.toLowerCase());
 
+  // ProductList.csv format detection (your specific file)
+  const isProductList = has('product name') && has('company') && has('totalstock') && has('packing') && has('mrp') && has('ptr');
+
+  if (isProductList) {
+    const catMap = {
+      'allopathy': 'allopathic-medicines',
+      'ayurvedic': 'ayurvedic-medicines',
+      'surgicals': 'surgical-products',
+      'homeopathy': 'homeopathic-medicines',
+      'babycare': 'baby-care-products',
+      'nutrition': 'nutrition-supplements',
+      'fmcg': 'fmcg-products',
+    };
+    const rows = parsed.rows
+      .filter(r => (r['Product Name'] || '').trim())
+      .map(r => {
+        const mrp = Number(r.MRP) || 0;
+        const price = mrp ? Math.max(1, Math.round(mrp * 0.9)) : Number(r.PTR) || 0; // MRP - 10%
+        const catRaw = (r.Category || '').trim().toLowerCase();
+        const catSlug = catMap[catRaw] || 'allopathic-medicines';
+        return {
+          name: (r['Product Name'] || '').trim(),
+          brand: (r.Company || '').trim() || 'Generic',
+          category: catSlug,
+          subcategory: '',
+          price,
+          mrp,
+          stock: Number(r.TotalStock) || 0,
+          packSize: (r.Packing || '').trim(),
+          description: '',
+          prescription: catRaw === 'allopathy' || catRaw === 'ayurvedic' ? 'true' : 'false',
+          imageUrl: '',
+        };
+      });
+    return { format: 'productlist', rows };
+  }
+
   // Distributor invoice format detection (KMA / Marg-style)
   const isDistributor = has('ProductDesc') || has('MRP') && has('PTR') && (has('Manufacturer') || has('MfgrNick'));
 
