@@ -377,6 +377,20 @@ export async function GET(req, { params }) {
         ];
         if (cat?.slug) orCat.push({ category: cat.slug });
         if (cat?.name) orCat.push({ category: cat.name }, { category: { $regex: '^' + String(cat.name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' } });
+        // Broad match: derive a root token (e.g., 'allopath') from slug/name to catch 'allopathy'/'allopathic'
+        const deriveRoot = (s) => {
+          if (!s) return '';
+          const base = String(s).toLowerCase().replace(/[-_]+/g, ' ').replace(/\s*(medicines?|products?|items?)\s*$/i, '').trim();
+          return base.replace(/(ic|ies|y)$/i, '').trim();
+        };
+        const rootFromSlug = deriveRoot(cat?.slug);
+        const rootFromName = deriveRoot(cat?.name);
+        const escape = (x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const roots = Array.from(new Set([rootFromSlug, rootFromName].filter(Boolean)));
+        for (const r of roots) {
+          // Match category strings that start with the root, ignoring leading spaces
+          orCat.push({ category: { $regex: '^\\s*' + escape(r), $options: 'i' } });
+        }
         andConds.push({ $or: orCat });
       }
       // Subcategory: match by id or legacy string (slug/name)
