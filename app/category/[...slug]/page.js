@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronRight, SlidersHorizontal } from 'lucide-react';
@@ -20,6 +20,10 @@ const CategoryPage = () => {
   const [products, setProducts] = useState([]);
   const [sort, setSort] = useState('popular');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const loadMoreRef = useRef(null);
+  const LIMIT = 60;
   const [breadcrumbs, setBreadcrumbs] = useState([]);
 
   useEffect(() => {
@@ -58,16 +62,54 @@ const CategoryPage = () => {
           pParams.set('categoryId', cat.id);
         }
         pParams.set('sort', sort);
-        pParams.set('limit', '60');
+        pParams.set('limit', String(LIMIT));
         fetch(`/api/products?${pParams.toString()}`)
           .then(r => r.json())
-          .then(d => { setProducts(d.products || []); setLoading(false); })
+          .then(d => { const list = d.products || []; setProducts(list); setLoading(false); setHasMore(list.length === LIMIT); })
           .catch(() => setLoading(false));
       } else {
         setLoading(false);
       }
     }).catch(() => setLoading(false));
   }, [leafSlug, sort]);
+
+  const loadMore = async () => {
+    if (loading || loadingMore || !hasMore || !category) return;
+    setLoadingMore(true);
+    const p = new URLSearchParams();
+    const cat = category;
+    if (cat.type === 'brand') {
+      p.set('brandId', cat.id);
+      if (cat.parentCategoryId) p.set('categoryId', cat.parentCategoryId);
+    } else if (cat.type === 'sub') {
+      p.set('subcategoryId', cat.id);
+    } else {
+      p.set('categoryId', cat.id);
+    }
+    p.set('sort', sort);
+    p.set('limit', String(LIMIT));
+    p.set('offset', String(products.length));
+    try {
+      const r = await fetch(`/api/products?${p.toString()}`);
+      const d = await r.json();
+      const list = d.products || [];
+      setProducts(prev => [...prev, ...list]);
+      setHasMore(list.length === LIMIT);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      const e = entries[0];
+      if (e.isIntersecting) loadMore();
+    }, { rootMargin: '200px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [category, sort, products.length, hasMore, loadingMore, loading]);
 
   if (!category && !loading) {
     return (
@@ -141,9 +183,14 @@ const CategoryPage = () => {
             <p className="text-slate-500 mt-2">Products will appear here once they are added to this category.</p>
           </div>
         ) : (
-          <div className="grid gap-2 md:gap-4 pb-16" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(160px, 100%), 1fr))' }}>
-            {products.map(p => <ProductCard key={p.id} product={p} />)}
-          </div>
+          <>
+            <div className="grid gap-2 md:gap-4 pb-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(160px, 100%), 1fr))' }}>
+              {products.map(p => <ProductCard key={p.id} product={p} />)}
+            </div>
+            <div ref={loadMoreRef} />
+            {loadingMore && <div className="text-center text-sm text-slate-500 py-4">Loading more…</div>}
+            {!hasMore && products.length > 0 && <div className="text-center text-sm text-slate-400 py-6">You’ve reached the end</div>}
+          </>
         )}
       </div>
     </div>

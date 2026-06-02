@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronRight, SlidersHorizontal, X } from 'lucide-react';
@@ -18,6 +18,10 @@ const ProductsInner = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const loadMoreRef = useRef(null);
+  const LIMIT = 60;
 
   useEffect(() => {
     fetch('/api/categories?tree=true').then(r => r.json()).then(d => setCategories(d.categories || []));
@@ -25,16 +29,48 @@ const ProductsInner = () => {
 
   useEffect(() => {
     setLoading(true);
+    setHasMore(true);
     const params = new URLSearchParams();
     if (category !== 'all') params.set('categoryId', category);
     if (search) params.set('search', search);
     params.set('sort', sort);
-    params.set('limit', '60');
+    params.set('limit', String(LIMIT));
     fetch(`/api/products?${params.toString()}`)
       .then(r => r.json())
-      .then(d => { setProducts(d.products || []); setLoading(false); })
+      .then(d => { const list = d.products || []; setProducts(list); setHasMore(list.length === LIMIT); setLoading(false); })
       .catch(() => setLoading(false));
   }, [category, search, sort]);
+
+  const loadMore = async () => {
+    if (loading || loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const params = new URLSearchParams();
+    if (category !== 'all') params.set('categoryId', category);
+    if (search) params.set('search', search);
+    params.set('sort', sort);
+    params.set('limit', String(LIMIT));
+    params.set('offset', String(products.length));
+    try {
+      const r = await fetch(`/api/products?${params.toString()}`);
+      const d = await r.json();
+      const list = d.products || [];
+      setProducts(prev => [...prev, ...list]);
+      setHasMore(list.length === LIMIT);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    const el = loadMoreRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver((entries) => {
+      const e = entries[0];
+      if (e.isIntersecting) loadMore();
+    }, { rootMargin: '200px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [category, search, sort, products.length, hasMore, loadingMore, loading]);
 
   const flatCats = (cats, depth = 0) => cats.reduce((acc, c) => {
     acc.push({ ...c, depth });
@@ -124,9 +160,14 @@ const ProductsInner = () => {
                 <Link href="/products"><Button className="mt-4 bg-teal-600 hover:bg-teal-700 rounded-full">Browse all</Button></Link>
               </div>
             ) : (
-              <div className="grid gap-2 md:gap-4 pb-16" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(160px, 100%), 1fr))' }}>
-                {products.map(p => <ProductCard key={p.id} product={p} />)}
-              </div>
+              <>
+                <div className="grid gap-2 md:gap-4 pb-6" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(min(160px, 100%), 1fr))' }}>
+                  {products.map(p => <ProductCard key={p.id} product={p} />)}
+                </div>
+                <div ref={loadMoreRef} />
+                {loadingMore && <div className="text-center text-sm text-slate-500 py-4">Loading more…</div>}
+                {!hasMore && products.length > 0 && <div className="text-center text-sm text-slate-400 py-6">You’ve reached the end</div>}
+              </>
             )}
           </div>
         </div>
