@@ -15,6 +15,8 @@ const ProductsList = () => {
   const [categories, setCategories] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(-1);
 
   useEffect(() => {
     fetch('/api/categories?tree=true').then(r => r.json()).then(d => setCategories(d.categories || []));
@@ -30,10 +32,15 @@ const ProductsList = () => {
     if (search) params.set('search', search);
     params.set('sort', sort);
     params.set('limit', '200');
-    fetch(`/api/products?${params.toString()}`).then(r => r.json()).then(d => setProducts(d.products || []));
+    const offset = (page - 1) * 200;
+    if (offset > 0) params.set('offset', String(offset));
+    fetch(`/api/products?${params.toString()}`).then(r => r.json()).then(d => {
+      setProducts(d.products || []);
+      if (typeof d.total === 'number' && d.total >= 0) setTotal(d.total);
+    });
   };
-  useEffect(() => { load(); }, [category, sort]);
-  useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [search]);
+  useEffect(() => { load(); }, [category, sort, page]);
+  useEffect(() => { const t = setTimeout(() => { setPage(1); load(); }, 250); return () => clearTimeout(t); }, [search]);
 
   const del = async (id, name) => {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
@@ -85,7 +92,7 @@ const ProductsList = () => {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Products</h1>
-          <p className="text-slate-500 text-sm mt-0.5">{products ? `${products.length} products` : 'Loading…'}</p>
+          <p className="text-slate-500 text-sm mt-0.5">{products ? (total > 0 ? `Showing ${(page-1)*200 + 1}–${(page-1)*200 + products.length} of ${total}` : `${products.length} products`) : 'Loading…'}</p>
         </div>
         <div className="flex gap-2">
           {selected.size > 0 && (
@@ -187,6 +194,13 @@ const ProductsList = () => {
               })}
             </tbody>
           </table>
+        </div>
+        <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 bg-slate-50">
+          <div className="text-xs text-slate-500">Page {page}{total>0 ? ` · ${Math.ceil(total/200)} pages` : ''}</div>
+          <div className="flex gap-2">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className={`px-3 py-1.5 rounded-md text-sm font-semibold ${page===1?'bg-slate-100 text-slate-400 cursor-not-allowed':'bg-white border border-slate-200 hover:bg-slate-100'}`}>Previous</button>
+            <button onClick={() => setPage(p => p + 1)} disabled={total>0 ? page * 200 >= total : (products?.length||0) < 200} className={`px-3 py-1.5 rounded-md text-sm font-semibold ${ (total>0 ? page*200>=total : (products?.length||0)<200) ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white border border-slate-200 hover:bg-slate-100' }`}>Next</button>
+          </div>
         </div>
       </div>
     </div>
