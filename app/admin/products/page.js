@@ -34,6 +34,7 @@ const ProductsList = () => {
     params.set('limit', '200');
     const offset = (page - 1) * 200;
     if (offset > 0) params.set('offset', String(offset));
+    params.set('_t', Date.now()); // cache bust
     fetch(`/api/products?${params.toString()}`).then(r => r.json()).then(d => {
       setProducts(d.products || []);
       if (typeof d.total === 'number' && d.total >= 0) setTotal(d.total);
