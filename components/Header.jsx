@@ -85,7 +85,7 @@ const Header = () => {
   };
 
   return (
-    <header className={`sticky top-0 z-40 bg-white/95 backdrop-blur-md transition-all ${scrolled ? 'shadow-soft border-b border-slate-100' : 'border-b border-transparent'}`}>
+    <header>
       {/* Top promo bar */}
       <div className="hidden md:block bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600 text-white text-xs">
         <div className="container max-w-7xl mx-auto flex items-center justify-between py-1.5 px-4">
@@ -131,8 +131,9 @@ const Header = () => {
         </div>
       </div>
 
-      {/* Main bar */}
-      <div className="container max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
+      {/* Main bar (sticky) */}
+      <div className={`sticky top-0 z-40 bg-white/95 backdrop-blur-md transition-all ${scrolled ? 'shadow-soft border-b border-slate-100' : 'border-b border-transparent'}`}>
+        <div className="container max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
         <Sheet>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" className="md:hidden text-slate-700"><Menu className="w-5 h-5" /></Button>
@@ -250,6 +251,7 @@ const Header = () => {
           <span className="hidden md:inline">Cart</span>
           {totalQty > 0 && <span className="absolute -top-0.5 -right-0.5 md:static md:ml-1 bg-rose-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">{totalQty}</span>}
         </Link>
+        </div>
       </div>
 
       {/* Mobile location strip */}
