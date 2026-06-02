@@ -40,23 +40,31 @@ function getClientIp(req) {
   return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 }
 
+const ALLOWED_ORIGIN = process.env.CORS_ORIGIN || '*';
+const SECURITY = {
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'X-Frame-Options': 'DENY',
+  'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
+};
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
   'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  ...SECURITY,
 };
 // Tiered cache TTLs. Edge caches at Vercel; SWR keeps responses snappy while revalidating.
 const CACHE_SHORT = { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=120' };   // product lists (changing)
 const CACHE_MED   = { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' };  // product detail
 const CACHE_LONG  = { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200' };// categories, settings
 const NO_CACHE    = { 'Cache-Control': 'private, no-store' };
-const json = (data, status = 200, cache = false) => {
+const json = (data, status = 200, cache = false, extraHeaders = {}) => {
   let headers = CORS;
   if (cache === true || cache === 'short') headers = { ...CORS, ...CACHE_SHORT };
   else if (cache === 'med') headers = { ...CORS, ...CACHE_MED };
   else if (cache === 'long') headers = { ...CORS, ...CACHE_LONG };
   else if (cache === 'none') headers = { ...CORS, ...NO_CACHE };
-  return NextResponse.json(data, { status, headers });
+  return NextResponse.json(data, { status, headers: { ...headers, ...extraHeaders } });
 };
 
 function sanitizeImages(images) {
@@ -136,7 +144,11 @@ async function ensureAdminUser(db) {
   // Unified users collection - admin is just a user with role='admin'
   const u = await db.collection('users').findOne({ email: 'admin@chemistshop.top' });
   if (!u) {
-    const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
+    const adminPass = process.env.ADMIN_PASSWORD || null;
+    if (!adminPass) {
+      console.warn('[SECURITY] ADMIN_PASSWORD not set; admin user not created. Set ADMIN_PASSWORD and redeploy.');
+      return;
+    }
     const salt = crypto.randomBytes(16).toString('hex');
     const hash = hashPassword(adminPass, salt);
     await db.collection('users').insertOne({ id: 'admin-1', email: 'admin@chemistshop.top', name: 'Admin', role: 'admin', phone: '', salt, hash, createdAt: new Date().toISOString() });
@@ -301,10 +313,10 @@ export async function GET(req, { params }) {
     if (path === 'auth/me') {
       const token = getBearer(req);
       const data = verifyToken(token);
-      if (!data) return json({ ok: false, error: 'Invalid or expired token' }, 401);
+      if (!data) return json({ ok: false, error: 'Invalid or expired token' }, 401, 'none');
       const user = await db.collection('users').findOne({ id: data.uid }, { projection: { _id: 0, hash: 0, salt: 0 } });
-      if (!user) return json({ ok: false }, 401);
-      return json({ ok: true, user });
+      if (!user) return json({ ok: false }, 401, 'none');
+      return json({ ok: true, user }, 200, 'none');
     }
 
     // ============================================
@@ -400,15 +412,25 @@ export async function GET(req, { params }) {
 
     if (path === 'orders') {
       const userId = searchParams.get('userId');
-      if (!userId) return json({ orders: [] });
+      const token = getBearer(req);
+      const auth = verifyToken(token);
+      if (!auth) return json({ ok: false, error: 'Unauthorized' }, 401, 'none');
+      if (!userId) return json({ orders: [] }, 200, 'none');
+      const isAdmin = (await db.collection('users').findOne({ id: auth.uid }))?.role === 'admin';
+      if (!isAdmin && auth.uid !== userId) return json({ ok: false, error: 'Forbidden' }, 403, 'none');
       const orders = await db.collection('orders').find({ userId }, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
-      return json({ orders });
+      return json({ orders }, 200, 'none');
     }
     if (path.startsWith('orders/')) {
       const id = path.replace('orders/', '');
+      const token = getBearer(req);
+      const auth = verifyToken(token);
+      if (!auth) return json({ ok: false, error: 'Unauthorized' }, 401, 'none');
       const order = await db.collection('orders').findOne({ id }, { projection: { _id: 0 } });
-      if (!order) return json({ error: 'Order not found' }, 404);
-      return json({ order });
+      if (!order) return json({ error: 'Order not found' }, 404, 'none');
+      const isAdmin = (await db.collection('users').findOne({ id: auth.uid }))?.role === 'admin';
+      if (!isAdmin && order.userId !== auth.uid) return json({ ok: false, error: 'Forbidden' }, 403, 'none');
+      return json({ order }, 200, 'none');
     }
 
     if (path === 'admin/orders') {
@@ -553,15 +575,20 @@ export async function GET(req, { params }) {
 
     // Prescriptions
     if (path === 'prescriptions') {
-      const userId = searchParams.get('userId');
-      const prescriptions = await db.collection('prescriptions').find(userId ? { userId } : {}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
-      return json({ prescriptions });
+      const token = getBearer(req);
+      const auth = verifyToken(token);
+      if (!auth) return json({ ok: false, error: 'Unauthorized' }, 401, 'none');
+      const isAdmin = (await db.collection('users').findOne({ id: auth.uid }))?.role === 'admin';
+      const filter = isAdmin ? {} : { userId: auth.uid };
+      const prescriptions = await db.collection('prescriptions').find(filter, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
+      return json({ prescriptions }, 200, 'none');
     }
     if (path === 'prescriptions/approved') {
-      const userId = searchParams.get('userId');
-      if (!userId) return json({ approved: false }, 200);
-      const approved = await db.collection('prescriptions').findOne({ userId, status: 'Approved' }, { projection: { _id: 0 } });
-      return json({ approved: !!approved, prescription: approved || null });
+      const token = getBearer(req);
+      const auth = verifyToken(token);
+      if (!auth) return json({ approved: false }, 200, 'none');
+      const approved = await db.collection('prescriptions').findOne({ userId: auth.uid, status: 'Approved' }, { projection: { _id: 0 } });
+      return json({ approved: !!approved, prescription: approved || null }, 200, 'none');
     }
     if (path === 'admin/prescriptions') {
       const admin = await requireAdmin(req, db);
@@ -586,16 +613,24 @@ export async function GET(req, { params }) {
 
     // Chat (general pharmacist conversations)
     if (path === 'chat/thread') {
-      const userId = searchParams.get('userId');
-      if (!userId) return json({ thread: null });
-      const thread = await db.collection('chat_threads').findOne({ userId, status: 'open' }, { projection: { _id: 0 } });
-      return json({ thread });
+      const token = getBearer(req);
+      const auth = verifyToken(token);
+      if (!auth) return json({ thread: null }, 200, 'none');
+      const thread = await db.collection('chat_threads').findOne({ userId: auth.uid, status: 'open' }, { projection: { _id: 0 } });
+      return json({ thread }, 200, 'none');
     }
     if (path === 'chat/messages') {
       const threadId = searchParams.get('threadId');
-      if (!threadId) return json({ messages: [] });
+      if (!threadId) return json({ messages: [] }, 200, 'none');
+      const token = getBearer(req);
+      const auth = verifyToken(token);
+      if (!auth) return json({ messages: [] }, 200, 'none');
+      const thread = await db.collection('chat_threads').findOne({ id: threadId }, { projection: { _id: 0, userId: 1 } });
+      if (!thread) return json({ messages: [] }, 200, 'none');
+      const isAdmin = (await db.collection('users').findOne({ id: auth.uid }))?.role === 'admin';
+      if (!isAdmin && thread.userId !== auth.uid) return json({ messages: [] }, 200, 'none');
       const messages = await db.collection('chat_messages').find({ threadId }, { projection: { _id: 0 } }).sort({ createdAt: 1 }).toArray();
-      return json({ messages });
+      return json({ messages }, 200, 'none');
     }
     if (path === 'admin/chats') {
       const admin = await requireAdmin(req, db);
@@ -886,7 +921,12 @@ export async function POST(req, { params }) {
       if (hash !== user.hash) return json({ ok: false, error: 'Invalid email or password' }, 401);
       if (user.role !== 'admin') return json({ ok: false, error: 'This account does not have admin access' }, 403);
       const token = signToken({ uid: user.id, email: user.email, role: user.role });
-      return json({ ok: true, token, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+      return json(
+        { ok: true, token, user: { id: user.id, email: user.email, name: user.name, role: user.role } },
+        200,
+        'none',
+        { 'Set-Cookie': `cs_token=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${7 * 86400}` }
+      );
     }
 
     // Unified auth: login (any role)
@@ -902,7 +942,12 @@ export async function POST(req, { params }) {
       const hash = hashPassword(password, user.salt);
       if (hash !== user.hash) return json({ ok: false, error: 'Invalid email or password' }, 401);
       const token = signToken({ uid: user.id, email: user.email, role: user.role });
-      return json({ ok: true, token, user: { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone || '' } });
+      return json(
+        { ok: true, token, user: { id: user.id, email: user.email, name: user.name, role: user.role, phone: user.phone || '' } },
+        200,
+        'none',
+        { 'Set-Cookie': `cs_token=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${7 * 86400}` }
+      );
     }
 
     // Unified auth: signup (only role='user'; admin must be seeded)
@@ -921,7 +966,12 @@ export async function POST(req, { params }) {
       const user = { id, name: (name || '').trim(), email: emailLc, phone: (phone || '').trim(), role: 'user', salt, hash, createdAt: new Date().toISOString() };
       await db.collection('users').insertOne({ ...user });
       const token = signToken({ uid: id, email: emailLc, role: 'user' });
-      return json({ ok: true, token, user: { id, email: emailLc, name: user.name, phone: user.phone, role: 'user' } });
+      return json(
+        { ok: true, token, user: { id, email: emailLc, name: user.name, phone: user.phone, role: 'user' } },
+        200,
+        'none',
+        { 'Set-Cookie': `cs_token=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${7 * 86400}` }
+      );
     }
 
     // ============================================
@@ -1370,34 +1420,43 @@ export async function POST(req, { params }) {
     }
 
     if (path === 'prescriptions') {
+      const auth = await requireAuth(req, db);
+      if (auth.error) return auth.error;
       const id = 'RX-' + Date.now().toString(36).toUpperCase();
       const doc = {
-        id, userId: body.userId || 'guest', patientName: body.patientName || '', phone: body.phone || '',
+        id, userId: auth.user.id, patientName: body.patientName || '', phone: body.phone || '',
         notes: body.notes || '', fileName: body.fileName || '', fileDataUrl: body.fileDataUrl || '',
         status: 'Under Review', createdAt: new Date().toISOString(),
       };
       await db.collection('prescriptions').insertOne({ ...doc });
       const safe = { ...doc }; delete safe.fileDataUrl;
-      return json({ prescription: safe });
+      return json({ prescription: safe }, 200, 'none');
     }
     if (path.startsWith('prescriptions/') && path.endsWith('/messages')) {
+      const auth = await requireAuth(req, db);
+      if (auth.error) return auth.error;
       const id = path.split('/')[1];
-      const msg = { id: 'msg-' + uuidv4().slice(0, 8), prescriptionId: id, sender: body.sender || 'admin', authorName: body.authorName || 'Pharmacist', text: body.text || '', createdAt: new Date().toISOString() };
+      // Only admin or owner of the prescription can post
+      const rx = await db.collection('prescriptions').findOne({ id }, { projection: { _id: 0, userId: 1 } });
+      const isAdmin = auth.user.role === 'admin';
+      if (!rx || (!isAdmin && rx.userId !== auth.user.id)) return json({ ok: false, error: 'Forbidden' }, 403, 'none');
+      const msg = { id: 'msg-' + uuidv4().slice(0, 8), prescriptionId: id, sender: isAdmin ? 'admin' : 'user', authorName: body.authorName || (isAdmin ? 'Pharmacist' : 'Customer'), text: String(body.text || '').slice(0, 1000), createdAt: new Date().toISOString() };
       await db.collection('rx_messages').insertOne({ ...msg });
-      return json({ message: msg });
+      return json({ message: msg }, 200, 'none');
     }
 
     // Chat: start or get user's open thread
     if (path === 'chat/thread') {
-      const { userId, userName, userEmail } = body;
-      if (!userId) return json({ ok: false, error: 'userId required' }, 400);
-      let thread = await db.collection('chat_threads').findOne({ userId, status: 'open' }, { projection: { _id: 0 } });
+      const auth = await requireAuth(req, db);
+      if (auth.error) return auth.error;
+      const { userName, userEmail } = body;
+      let thread = await db.collection('chat_threads').findOne({ userId: auth.user.id, status: 'open' }, { projection: { _id: 0 } });
       if (!thread) {
         thread = {
           id: 'ct-' + uuidv4().slice(0, 10),
-          userId,
-          userName: userName || 'Customer',
-          userEmail: userEmail || '',
+          userId: auth.user.id,
+          userName: userName || auth.user.name || 'Customer',
+          userEmail: userEmail || auth.user.email || '',
           status: 'open',
           unreadAdmin: false,
           unreadUser: false,
@@ -1406,32 +1465,40 @@ export async function POST(req, { params }) {
         };
         await db.collection('chat_threads').insertOne({ ...thread });
       }
-      return json({ thread });
+      return json({ thread }, 200, 'none');
     }
 
     // Chat: post a message (sender: 'user' | 'admin')
     if (path === 'chat/messages') {
-      const { threadId, sender, authorName, text } = body;
+      const auth = await requireAuth(req, db);
+      if (auth.error) return auth.error;
+      const { threadId, text } = body;
       if (!threadId || !text) return json({ ok: false, error: 'threadId and text required' }, 400);
+      const thread = await db.collection('chat_threads').findOne({ id: threadId }, { projection: { _id: 0, userId: 1 } });
+      if (!thread) return json({ ok: false, error: 'Thread not found' }, 404);
+      const isAdmin = auth.user.role === 'admin';
+      if (!isAdmin && thread.userId !== auth.user.id) return json({ ok: false, error: 'Forbidden' }, 403, 'none');
       const msg = {
         id: 'cm-' + uuidv4().slice(0, 10),
         threadId,
-        sender: sender === 'admin' ? 'admin' : 'user',
-        authorName: authorName || (sender === 'admin' ? 'Pharmacist' : 'Customer'),
+        sender: isAdmin ? 'admin' : 'user',
+        authorName: isAdmin ? 'Pharmacist' : (auth.user.name || 'Customer'),
         text: String(text).slice(0, 2000),
         createdAt: new Date().toISOString(),
       };
       await db.collection('chat_messages').insertOne({ ...msg });
       const setUnread = msg.sender === 'user' ? { unreadAdmin: true, unreadUser: false } : { unreadAdmin: false, unreadUser: true };
       await db.collection('chat_threads').updateOne({ id: threadId }, { $set: { lastMessageAt: msg.createdAt, lastMessageText: msg.text, ...setUnread } });
-      return json({ message: msg });
+      return json({ message: msg }, 200, 'none');
     }
 
     if (path === 'addresses') {
+      const auth = await requireAuth(req, db);
+      if (auth.error) return auth.error;
       const id = 'ADDR-' + uuidv4().slice(0, 8).toUpperCase();
-      const addr = { id, ...body, createdAt: new Date().toISOString() };
+      const addr = { id, userId: auth.user.id, ...body, createdAt: new Date().toISOString() };
       await db.collection('addresses').insertOne({ ...addr });
-      return json({ address: addr });
+      return json({ address: addr }, 200, 'none');
     }
 
     if (path === 'seed/reset') {

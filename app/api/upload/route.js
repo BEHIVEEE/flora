@@ -4,9 +4,10 @@ import { getBearer, verifyToken } from '@/lib/auth';
 import { getDb } from '@/lib/mongo';
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'X-Content-Type-Options': 'nosniff',
 };
 
 export async function OPTIONS() {
@@ -24,6 +25,9 @@ export async function POST(req) {
     const user = await db.collection('users').findOne({ id: data.uid }, { projection: { _id: 0, role: 1 } });
     if (!user) {
       return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401, headers: CORS });
+    }
+    if (user.role !== 'admin') {
+      return NextResponse.json({ ok: false, error: 'Admin only' }, { status: 403, headers: CORS });
     }
 
     const body = await req.json().catch(() => ({}));
