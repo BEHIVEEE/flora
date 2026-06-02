@@ -53,8 +53,11 @@ const ProductsList = () => {
 
   const del = async (id, name) => {
     if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    console.log('[DELETE] Attempting to delete product:', id);
     const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
+    console.log('[DELETE] Response status:', res.status, res.statusText);
     const d = await res.json();
+    console.log('[DELETE] Response body:', d);
     if (res.ok) { toast.success('Product deleted'); load(); }
     else toast.error(d.error || 'Failed to delete');
   };
