@@ -1292,91 +1292,146 @@ export async function POST(req, { params }) {
         const v = String(val).trim().toLowerCase();
         return allCats.find(c => c.id === val || c.slug === v || c.name.toLowerCase() === v);
       };
+      
+      // Pre-fetch ALL existing products in this batch in ONE query (much faster!)
+      const namesAndBrands = items.map(raw => ({
+        name: raw.name?.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        brand: (raw.brand || 'Generic').toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      })).filter(nb => nb.name);
+      
+      let existingProducts = [];
+      if (namesAndBrands.length > 0) {
+        // Build OR query for all products in batch
+        const orClause = namesAndBrands.map(nb => ({
+          name: { $regex: `^${nb.name}$`, $options: 'i' },
+          brand: { $regex: `^${nb.brand}$`, $options: 'i' }
+        }));
+        existingProducts = await db.collection('products').find({ $or: orClause }).toArray();
+      }
+      
+      // Create lookup map for fast access
+      const existingMap = new Map();
+      for (const p of existingProducts) {
+        const key = (p.name || '').toLowerCase() + '|' + (p.brand || '').toLowerCase();
+        existingMap.set(key, p);
+      }
+      
+      // Separate products into insert and update lists
+      const toInsert = [];
+      const toUpdate = [];
+      
       for (const raw of items) {
         try {
           if (!raw.name) { results.failed++; results.errors.push('Missing name'); continue; }
           const rawImages = raw.images || (raw.imageUrl ? [raw.imageUrl] : (raw.image ? [raw.image] : []));
           const images = sanitizeImages(rawImages);
 
-          // Resolve category, subcategory, brand from CSV
           const mainCat = findCat(raw.category);
           const subCat = findCat(raw.subcategory);
           const brandCat = findCat(raw.brand);
           const brandName = brandCat?.name || raw.brand || 'Generic';
           
-          // Check if product exists by name + brand (case-insensitive)
-          const existing = await db.collection('products').findOne({
-            name: { $regex: new RegExp(`^${raw.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
-            brand: { $regex: new RegExp(`^${brandName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
-          });
+          const key = (raw.name || '').toLowerCase() + '|' + brandName.toLowerCase();
+          const existing = existingMap.get(key);
 
           const price = Number(raw.price) || 0;
           const mrp = Number(raw.mrp) || price;
           const newStock = Number(raw.stock) || 0;
 
           if (existing) {
-            // Update existing product - add to stock
-            const oldStock = existing.stock || 0;
-            const stockDiff = newStock - oldStock;
-            await db.collection('products').updateOne(
-              { _id: existing._id },
-              { 
-                $set: {
-                  price, mrp,
-                  packSize: raw.packSize || raw.pack_size || '',
-                  image: images[0] || existing.image,
-                  images: images.length ? images : existing.images,
-                  stock: newStock,
-                  prescription: String(raw.prescription || '').toLowerCase() === 'true' || raw.prescription === true,
-                  description: raw.description || existing.description,
-                  updatedAt: new Date().toISOString(),
-                }
-              }
-            );
-            // Log inventory change
-            if (stockDiff !== 0) {
-              await db.collection('inventory_logs').insertOne({ 
-                id: 'inv-' + uuidv4().slice(0, 8), 
-                productId: existing.id, 
-                productName: existing.name, 
-                type: 'bulk-update', 
-                qtyChange: stockDiff, 
-                before: oldStock, 
-                after: newStock, 
-                reason: 'Bulk CSV import (stock update)', 
-                createdAt: new Date().toISOString() 
-              });
-            }
-            results.updated++;
+            toUpdate.push({ raw, existing, images, newStock, price, mrp, brandName, mainCat });
           } else {
-            // Create new product
-            const id = 'p-' + uuidv4().slice(0, 8);
-            const product = {
-              id, name: raw.name,
-              slug: raw.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-              category: mainCat?.id || raw.category || 'medicines',
-              categoryId: mainCat?.id || null,
-              subcategoryId: subCat?.id || null,
-              brand: brandName,
-              brandId: brandCat?.id || null,
-              manufacturer: raw.manufacturer || '',
-              price, mrp,
-              packSize: raw.packSize || raw.pack_size || '',
-              image: images[0] || '', images,
-              stock: newStock,
-              prescription: String(raw.prescription || '').toLowerCase() === 'true' || raw.prescription === true,
-              rating: 4.5, ratingCount: 0, tags: [],
-              description: raw.description || '',
-              createdAt: new Date().toISOString(),
-            };
-            await db.collection('products').insertOne({ ...product });
-            if (newStock > 0) {
-              await db.collection('inventory_logs').insertOne({ id: 'inv-' + uuidv4().slice(0, 8), productId: id, productName: product.name, type: 'import', qtyChange: newStock, before: 0, after: newStock, reason: 'Bulk CSV import', createdAt: new Date().toISOString() });
-            }
-            results.created++;
+            toInsert.push({ raw, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat });
           }
         } catch (e) { results.failed++; results.errors.push(e.message); }
       }
+      
+      // Bulk update existing products
+      for (const { raw, existing, images, newStock, price, mrp, brandName, mainCat } of toUpdate) {
+        try {
+          const oldStock = existing.stock || 0;
+          const stockDiff = newStock - oldStock;
+          await db.collection('products').updateOne(
+            { _id: existing._id },
+            { 
+              $set: {
+                price, mrp,
+                packSize: raw.packSize || raw.pack_size || '',
+                image: images[0] || existing.image,
+                images: images.length ? images : existing.images,
+                stock: newStock,
+                prescription: String(raw.prescription || '').toLowerCase() === 'true' || raw.prescription === true,
+                description: raw.description || existing.description,
+                updatedAt: new Date().toISOString(),
+              }
+            }
+          );
+          if (stockDiff !== 0) {
+            await db.collection('inventory_logs').insertOne({ 
+              id: 'inv-' + uuidv4().slice(0, 8), 
+              productId: existing.id, 
+              productName: existing.name, 
+              type: 'bulk-update', 
+              qtyChange: stockDiff, 
+              before: oldStock, 
+              after: newStock, 
+              reason: 'Bulk CSV import (stock update)', 
+              createdAt: new Date().toISOString() 
+            });
+          }
+          results.updated++;
+        } catch (e) { results.failed++; results.errors.push(e.message); }
+      }
+      
+      // Bulk insert new products
+      if (toInsert.length > 0) {
+        const newProducts = toInsert.map(({ raw, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat }) => {
+          const id = 'p-' + uuidv4().slice(0, 8);
+          return {
+            id, name: raw.name,
+            slug: raw.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+            category: mainCat?.id || raw.category || 'medicines',
+            categoryId: mainCat?.id || null,
+            subcategoryId: subCat?.id || null,
+            brand: brandName,
+            brandId: brandCat?.id || null,
+            manufacturer: raw.manufacturer || '',
+            price, mrp,
+            packSize: raw.packSize || raw.pack_size || '',
+            image: images[0] || '', images,
+            stock: newStock,
+            prescription: String(raw.prescription || '').toLowerCase() === 'true' || raw.prescription === true,
+            rating: 4.5, ratingCount: 0, tags: [],
+            description: raw.description || '',
+            createdAt: new Date().toISOString(),
+          };
+        });
+        
+        try {
+          await db.collection('products').insertMany(newProducts);
+          results.created = newProducts.length;
+          
+          // Log inventory for new products with stock
+          const logsToInsert = newProducts.filter(p => p.stock > 0).map(p => ({
+            id: 'inv-' + uuidv4().slice(0, 8),
+            productId: p.id,
+            productName: p.name,
+            type: 'import',
+            qtyChange: p.stock,
+            before: 0,
+            after: p.stock,
+            reason: 'Bulk CSV import',
+            createdAt: new Date().toISOString()
+          }));
+          if (logsToInsert.length > 0) {
+            await db.collection('inventory_logs').insertMany(logsToInsert);
+          }
+        } catch (e) { 
+          results.failed += toInsert.length; 
+          results.errors.push('Bulk insert failed: ' + e.message); 
+        }
+      }
+      
       return json(results);
     }
 
