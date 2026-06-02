@@ -53,6 +53,7 @@ function detectAndNormalize(parsed) {
 
   if (isProductList) {
     console.log('[IMPORT] Detected ProductList format, headers:', parsed.headers.slice(0,10));
+    const toStr = (val) => (val === null || val === undefined) ? '' : String(val).trim();
     const catMap = {
       'allopathy': 'allopathic-medicines',
       'ayurvedic': 'ayurvedic-medicines',
@@ -63,27 +64,29 @@ function detectAndNormalize(parsed) {
       'fmcg': 'fmcg-products',
     };
     const rows = parsed.rows
-      .filter(r => (r['Product Name'] || '').trim())
+      .filter(r => toStr(r['Product Name']))
       .map(r => {
         const mrp = Number(r.MRP) || 0;
-        const price = mrp ? Math.max(1, Math.round(mrp * 0.9)) : Number(r.PTR) || 0; // MRP - 10%
-        const catRaw = (r.Category || '').trim().toLowerCase();
+        const ptr = Number(r.PTR) || 0;
+        const price = mrp ? Math.max(1, Math.round(mrp * 0.9)) : ptr; // MRP - 10%
+        const catRaw = toStr(r.Category).toLowerCase();
         const catSlug = catMap[catRaw] || 'allopathic-medicines';
         // Stock: prefer TotalStock, fallback to SQTY + SFQTY
         let stock = Number(r.TotalStock) || 0;
         if (!stock && (r.SQTY || r.SFQTY)) {
           stock = (Number(r.SQTY) || 0) + (Number(r.SFQTY) || 0);
         }
-        console.log('[IMPORT] Sample row stock:', r['Product Name'], 'TotalStock:', r.TotalStock, 'SQTY:', r.SQTY, 'SFQTY:', r.SFQTY, '=> stock:', stock);
+        const name = toStr(r['Product Name']);
+        console.log('[IMPORT] Sample row stock:', name, 'TotalStock:', r.TotalStock, 'SQTY:', r.SQTY, 'SFQTY:', r.SFQTY, '=> stock:', stock);
         return {
-          name: (r['Product Name'] || '').trim(),
-          brand: (r.Company || '').trim() || 'Generic',
+          name,
+          brand: toStr(r.Company) || 'Generic',
           category: catSlug,
           subcategory: '',
           price,
           mrp,
           stock,
-          packSize: (r.Packing || '').trim(),
+          packSize: toStr(r.Packing),
           description: '',
           prescription: catRaw === 'allopathy' || catRaw === 'ayurvedic' ? 'true' : 'false',
           imageUrl: '',
