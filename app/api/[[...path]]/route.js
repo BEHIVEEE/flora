@@ -193,14 +193,31 @@ async function ensureIndexes(db) {
   } catch (e) { console.error('Index creation error', e); }
 }
 
+async function ensureCategorySeed(db) {
+  const now = new Date().toISOString();
+  for (const cat of CATEGORY_SEED) {
+    await db.collection('categories').updateOne(
+      { slug: cat.slug },
+      {
+        $setOnInsert: {
+          ...cat,
+          createdAt: now,
+          updatedAt: now,
+        },
+      },
+      { upsert: true }
+    );
+  }
+}
+
 async function ensureSeed(db) {
   await ensureIndexes(db);
+  await ensureCategorySeed(db);
   const hasProducts = await db.collection('products').countDocuments({}, { limit: 1 });
   if (hasProducts === 0) {
     await db.collection('products').insertMany(PRODUCTS.map(p => ({ ...p, images: [p.image] })));
     await db.collection('settings').insertOne({ ...DEFAULT_SETTINGS });
     await db.collection('slots').insertMany(DEFAULT_SLOTS.map(s => ({ ...s })));
-    await db.collection('categories').insertMany(CATEGORY_SEED.map(c => ({ ...c, createdAt: new Date().toISOString() })));
     await ensureAdminUser(db);
 
     const products = await db.collection('products').find({}, { projection: { _id: 0 } }).limit(15).toArray();
