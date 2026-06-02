@@ -39,6 +39,15 @@ const ProductsList = () => {
       if (typeof d.total === 'number' && d.total >= 0) setTotal(d.total);
     });
   };
+
+  const deleteAll = async () => {
+    if (!confirm('Delete ALL products? This cannot be undone.')) return;
+    const token = localStorage.getItem('cs_token');
+    const res = await fetch('/api/admin/products/delete-all', { method: 'DELETE', headers: token ? { Authorization: 'Bearer ' + token } : {} });
+    const d = await res.json();
+    if (res.ok) { toast.success(`Deleted ${d.deleted} products`); setSelected(new Set()); setPage(1); load(); }
+    else toast.error(d.error || 'Failed to delete all');
+  };
   useEffect(() => { load(); }, [category, sort, page]);
   useEffect(() => { const t = setTimeout(() => { setPage(1); load(); }, 250); return () => clearTimeout(t); }, [search]);
 
@@ -101,6 +110,7 @@ const ProductsList = () => {
             </Button>
           )}
           <Link href="/admin/products/import"><Button variant="outline" className="rounded-full h-10 font-semibold"><Upload className="w-4 h-4 mr-1" /> Import CSV</Button></Link>
+          <Button variant="destructive" onClick={deleteAll} className="rounded-full h-10 font-semibold">Delete All</Button>
           <Link href="/admin/products/new"><Button className="bg-teal-600 hover:bg-teal-700 rounded-full h-10 font-semibold"><Plus className="w-4 h-4 mr-1" /> Add Product</Button></Link>
         </div>
       </div>

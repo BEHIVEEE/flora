@@ -1872,6 +1872,14 @@ export async function DELETE(req, { params }) {
   try {
     const db = await getDb();
     // Compliance: prescriptions can never be deleted, only archived via PATCH
+    if (path === 'admin/products/delete-all') {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const r = await db.collection('products').deleteMany({});
+      await db.collection('inventory_logs').deleteMany({});
+      return json({ ok: true, deleted: r.deletedCount || 0 });
+    }
+
     if (path.startsWith('prescriptions/')) {
       return json({ ok: false, error: 'Prescriptions cannot be deleted. Use archive instead.' }, 403);
     }
