@@ -24,6 +24,8 @@ import {
   MAX_FILE_SIZE,
 } from '@/lib/prescription-storage.js';
 
+const SAMPLE_PRODUCT_IDS = PRODUCTS.map(p => p.id);
+
 // In-memory rate limiter (per IP)
 const rateMap = new Map();
 function rateLimit(ip, key, max = 10, windowMs = 60000) {
@@ -213,13 +215,32 @@ async function ensureCategorySeed(db) {
 async function ensureSeed(db) {
   await ensureIndexes(db);
   await ensureCategorySeed(db);
-  const hasProducts = await db.collection('products').countDocuments({}, { limit: 1 });
-  if (hasProducts === 0) {
-    await db.collection('products').insertMany(PRODUCTS.map(p => ({ ...p, images: [p.image] })));
-    await db.collection('settings').insertOne({ ...DEFAULT_SETTINGS });
-    await db.collection('slots').insertMany(DEFAULT_SLOTS.map(s => ({ ...s })));
-    await ensureAdminUser(db);
 
+  const enableSampleProducts = process.env.ENABLE_SAMPLE_PRODUCTS === 'true';
+
+  if (!enableSampleProducts && SAMPLE_PRODUCT_IDS.length) {
+    await db.collection('products').deleteMany({ id: { $in: SAMPLE_PRODUCT_IDS } });
+  }
+
+  const hasProducts = await db.collection('products').countDocuments({}, { limit: 1 });
+
+  if (enableSampleProducts && hasProducts === 0) {
+    await db.collection('products').insertMany(PRODUCTS.map(p => ({ ...p, images: [p.image] })));
+  }
+
+  const hasSettings = await db.collection('settings').countDocuments({}, { limit: 1 });
+  if (hasSettings === 0) {
+    await db.collection('settings').insertOne({ ...DEFAULT_SETTINGS });
+  }
+
+  const hasSlots = await db.collection('slots').countDocuments({}, { limit: 1 });
+  if (hasSlots === 0) {
+    await db.collection('slots').insertMany(DEFAULT_SLOTS.map(s => ({ ...s })));
+  }
+
+  await ensureAdminUser(db);
+
+  if (enableSampleProducts && hasProducts === 0) {
     const products = await db.collection('products').find({}, { projection: { _id: 0 } }).limit(15).toArray();
     const customers = [
       { name: 'Aaruhi Patel', phone: '9820000001', city: 'Mumbai' },
@@ -268,6 +289,8 @@ async function ensureSeed(db) {
       });
     }
     await db.collection('orders').insertMany(sample);
+  } else if (!enableSampleProducts) {
+    await db.collection('orders').deleteMany({ userId: /^u-sample-/ });
   }
 }
 
@@ -442,6 +465,10 @@ export async function GET(req, { params }) {
       }
 
       const filter = andConds.length ? { $and: andConds } : {};
+      if (SAMPLE_PRODUCT_IDS.length) {
+        if (filter.$and) filter.$and.push({ id: { $nin: SAMPLE_PRODUCT_IDS } });
+        else filter.id = { $nin: SAMPLE_PRODUCT_IDS };
+      }
       if (sort === 'price_asc') sortObj = { price: 1 };
       if (sort === 'price_desc') sortObj = { price: -1 };
       if (sort === 'rating') sortObj = { rating: -1 };
@@ -456,6 +483,7 @@ export async function GET(req, { params }) {
     }
     if (path.startsWith('products/')) {
       const id = path.replace('products/', '');
+      if (SAMPLE_PRODUCT_IDS.includes(id)) return json({ error: 'Product not found' }, 404);
       const product = await db.collection('products').findOne({ id }, { projection: { _id: 0 } });
       if (!product) return json({ error: 'Product not found' }, 404);
       const related = await db.collection('products').find({ category: product.category, id: { $ne: id } }, { projection: { _id: 0 } }).limit(8).toArray();
@@ -2040,6 +2068,17 @@ export async function DELETE(req, { params }) {
       if (admin.error) return admin.error;
       const r = await db.collection('products').deleteMany({});
       await db.collection('inventory_logs').deleteMany({});
+      return json({ ok: true, deleted: r.deletedCount || 0 });
+    }
+
+    if (path === 'admin/products/batch-delete') {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const { ids } = body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return json({ ok: false, error: 'ids array required' }, 400);
+      }
+      const r = await db.collection('products').deleteMany({ id: { $in: ids } });
       return json({ ok: true, deleted: r.deletedCount || 0 });
     }
 
