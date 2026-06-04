@@ -28,7 +28,7 @@ const ProductsList = () => {
   const load = () => {
     setProducts(null);
     const params = new URLSearchParams();
-    if (category !== 'all') params.set('category', category);
+    if (category !== 'all') params.set('categoryId', category);
     if (search) params.set('search', search);
     params.set('sort', sort);
     params.set('limit', '200');

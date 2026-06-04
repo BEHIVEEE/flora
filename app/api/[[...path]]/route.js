@@ -462,6 +462,28 @@ export async function GET(req, { params }) {
       return json({ product, related }, 200, 'med');
     }
 
+    if (path === 'notify-restock') {
+      const { productId, email, phone, name } = body;
+      if (!productId) return json({ ok: false, error: 'productId required' }, 400);
+      const product = await db.collection('products').findOne({ id: productId }, { projection: { _id: 0, id: 1, name: 1, category: 1, brand: 1 } });
+      if (!product) return json({ ok: false, error: 'Product not found' }, 404);
+      const entry = {
+        id: 'notify-' + uuidv4().slice(0, 10),
+        productId,
+        productName: product.name,
+        category: product.category || null,
+        brand: product.brand || null,
+        email: email ? String(email).trim().toLowerCase() : null,
+        phone: phone ? String(phone).trim() : null,
+        name: name ? String(name).trim() : null,
+        createdAt: new Date().toISOString(),
+        notifiedAt: null,
+        status: 'pending',
+      };
+      await db.collection('product_notifications').insertOne(entry);
+      return json({ ok: true });
+    }
+
     if (path === 'orders') {
       const userId = searchParams.get('userId');
       const token = getBearer(req);
@@ -511,7 +533,7 @@ export async function GET(req, { params }) {
       const weekAgo = new Date(Date.now() - 7 * 86400000);
       const monthAgo = new Date(Date.now() - 30 * 86400000);
 
-      const [todayAgg, weekAgg, monthAgg, productsCount, lowStock, pendingCount, pendingRx, totalOrders, recent] = await Promise.all([
+      const [todayAgg, weekAgg, monthAgg, productsCount, lowStock, pendingCount, pendingRx, totalOrders, recent, notifyPending, notifyTop] = await Promise.all([
         db.collection('orders').aggregate([
           { $match: { createdAt: { $gte: startOfToday.toISOString() } } },
           { $group: { _id: null, revenue: { $sum: '$total' }, count: { $sum: 1 } } },
@@ -530,6 +552,12 @@ export async function GET(req, { params }) {
         db.collection('prescriptions').countDocuments({ status: 'Under Review' }),
         db.collection('orders').countDocuments(),
         db.collection('orders').find({}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).limit(8).toArray(),
+        db.collection('product_notifications').countDocuments({ status: 'pending' }),
+        db.collection('product_notifications').aggregate([
+          { $group: { _id: '$productId', productName: { $first: '$productName' }, category: { $first: '$category' }, count: { $sum: 1 } } },
+          { $sort: { count: -1 } },
+          { $limit: 10 },
+        ]).toArray(),
       ]);
 
       const todayRevenue = todayAgg[0]?.revenue || 0;
@@ -557,7 +585,25 @@ export async function GET(req, { params }) {
         { $limit: 5 },
       ]).toArray();
 
-      return json({ todayRevenue, todayOrders, weekRevenue, weekOrders, monthRevenue, monthOrders, productsCount, lowStockCount: lowStock.length, lowStock, pendingCount, pendingRx, totalOrders, recent, series, topProducts: topProducts.map(p => ({ id: p._id, name: p.name, price: p.price, image: p.image, qty: p.qty })) });
+      return json({
+        todayRevenue,
+        todayOrders,
+        weekRevenue,
+        weekOrders,
+        monthRevenue,
+        monthOrders,
+        productsCount,
+        lowStockCount: lowStock.length,
+        lowStock,
+        pendingCount,
+        pendingRx,
+        totalOrders,
+        recent,
+        series,
+        topProducts: topProducts.map(p => ({ id: p._id, name: p.name, price: p.price, image: p.image, qty: p.qty })),
+        notifyPending,
+        notifyTop: notifyTop.map(n => ({ productId: n._id, productName: n.productName, category: n.category, count: n.count })),
+      });
     }
 
     if (path === 'admin/revenue') {
@@ -1339,11 +1385,52 @@ export async function POST(req, { params }) {
       const startTime = Date.now();
       // Pre-fetch all categories once for fast lookup
       const allCats = await db.collection('categories').find({}, { projection: { _id: 0 } }).toArray();
-      const findCat = (val) => {
+      const findCatRaw = (val) => {
         if (!val) return null;
-        const v = String(val).trim().toLowerCase();
-        return allCats.find(c => c.id === val || c.slug === v || c.name.toLowerCase() === v);
+        const str = String(val).trim();
+        const lower = str.toLowerCase();
+        return allCats.find(c => c.id === val || c.slug === lower || c.name.toLowerCase() === lower);
       };
+      const categorySynonyms = {
+        'allopathy': 'allopathic-medicines',
+        'allopathic': 'allopathic-medicines',
+        'cat allopathy': 'allopathic-medicines',
+        'cat allopathic': 'allopathic-medicines',
+        'cat allopathic medicines': 'allopathic-medicines',
+        'allopathic medicines': 'allopathic-medicines',
+        'ayurvedic': 'ayurvedic-medicines',
+        'ayurveda': 'ayurvedic-medicines',
+        'cat ayurvedic': 'ayurvedic-medicines',
+        'cat ayurvedic medicines': 'ayurvedic-medicines',
+        'cat ayurveda': 'ayurvedic-medicines',
+        'ayurvedic medicines': 'ayurvedic-medicines',
+        'homeopathy': 'homeopathic-medicines',
+        'homeopathic': 'homeopathic-medicines',
+        'cat homeopathic': 'homeopathic-medicines',
+        'cat homeopathy': 'homeopathic-medicines',
+        'homeopathic medicines': 'homeopathic-medicines',
+        'surgicals': 'surgical-products',
+        'cat surgicals': 'surgical-products',
+        'surgical': 'surgical-products',
+        'surgical products': 'surgical-products',
+        'generic': 'generic',
+        'cat generic': 'generic',
+        'generic medicines': 'generic',
+        'cat generic medicines': 'generic',
+      };
+      const normalizeCategoryValue = (val) => {
+        if (!val) return '';
+        const trimmed = String(val).trim();
+        const lower = trimmed.toLowerCase();
+        if (categorySynonyms[lower]) return categorySynonyms[lower];
+        const withoutPrefix = lower.startsWith('cat ')
+          ? lower.replace(/^cat\s+/, '')
+          : lower;
+        if (categorySynonyms[withoutPrefix]) return categorySynonyms[withoutPrefix];
+        return withoutPrefix;
+      };
+      const findCat = (val) => findCatRaw(normalizeCategoryValue(val) || val);
+      const findBrandCat = (val) => findCatRaw(val);
       
       // Pre-fetch ALL existing products in this batch in ONE query (much faster!)
       const namesAndBrands = items.map(raw => ({
@@ -1381,9 +1468,10 @@ export async function POST(req, { params }) {
           const rawImages = raw.images || (raw.imageUrl ? [raw.imageUrl] : (raw.image ? [raw.image] : []));
           const images = sanitizeImages(rawImages);
 
-          const mainCat = findCat(raw.category);
+          const normalizedCategory = normalizeCategoryValue(raw.category);
+          const mainCat = findCat(normalizedCategory || raw.category);
           const subCat = findCat(raw.subcategory);
-          const brandCat = findCat(raw.brand);
+          const brandCat = findBrandCat(raw.brand);
           const brandName = brandCat?.name || raw.brand || 'Generic';
           
           const key = (raw.name || '').toLowerCase() + '|' + brandName.toLowerCase();
@@ -1394,31 +1482,46 @@ export async function POST(req, { params }) {
           const newStock = Number(raw.stock) || 0;
 
           if (existing) {
-            toUpdate.push({ raw, existing, images, newStock, price, mrp, brandName, mainCat });
+            toUpdate.push({ raw, existing, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory });
           } else {
-            toInsert.push({ raw, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat });
+            toInsert.push({ raw, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory });
           }
         } catch (e) { results.failed++; results.errors.push(e.message); }
       }
       
       // Bulk update existing products
-      for (const { raw, existing, images, newStock, price, mrp, brandName, mainCat } of toUpdate) {
+      for (const { raw, existing, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory } of toUpdate) {
         try {
           const oldStock = existing.stock || 0;
           const stockDiff = newStock - oldStock;
+          const updateDoc = {
+            price,
+            mrp,
+            packSize: raw.packSize || raw.pack_size || existing.packSize || '',
+            image: images[0] || existing.image,
+            images: images.length ? images : existing.images,
+            stock: newStock,
+            prescription: String(raw.prescription || '').toLowerCase() === 'true' || raw.prescription === true,
+            description: raw.description || existing.description,
+            updatedAt: new Date().toISOString(),
+          };
+
+          const normalizedBrand = raw.brand ? brandName : (existing.brand || brandName);
+          if (normalizedBrand) updateDoc.brand = normalizedBrand;
+          if (brandCat?.id) updateDoc.brandId = brandCat.id;
+
+          const categorySlug = mainCat?.slug || normalizedCategory || (raw.category ? String(raw.category).trim().toLowerCase() : '');
+          if (mainCat?.id) updateDoc.categoryId = mainCat.id;
+          if (categorySlug) updateDoc.category = categorySlug;
+
+          const subcategorySlug = subCat?.slug || (raw.subcategory ? String(raw.subcategory).trim() : '');
+          if (subCat?.id) updateDoc.subcategoryId = subCat.id;
+          if (subcategorySlug) updateDoc.subcategory = subcategorySlug;
+
           await db.collection('products').updateOne(
             { _id: existing._id },
             { 
-              $set: {
-                price, mrp,
-                packSize: raw.packSize || raw.pack_size || '',
-                image: images[0] || existing.image,
-                images: images.length ? images : existing.images,
-                stock: newStock,
-                prescription: String(raw.prescription || '').toLowerCase() === 'true' || raw.prescription === true,
-                description: raw.description || existing.description,
-                updatedAt: new Date().toISOString(),
-              }
+              $set: updateDoc
             }
           );
           if (stockDiff !== 0) {
@@ -1441,15 +1544,19 @@ export async function POST(req, { params }) {
       
       // Bulk insert new products
       if (toInsert.length > 0 && (Date.now() - startTime) <= 18000) {
-        const newProducts = toInsert.map(({ raw, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat }) => {
+        const newProducts = toInsert.map(({ raw, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory }) => {
           const id = 'p-' + uuidv4().slice(0, 8);
+          const categorySlug = mainCat?.slug || normalizedCategory || (raw.category ? String(raw.category).trim().toLowerCase() : '');
+          const subcategorySlug = subCat?.slug || (raw.subcategory ? String(raw.subcategory).trim() : '');
+          const resolvedBrand = brandName || 'Generic';
           return {
             id, name: raw.name,
             slug: raw.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-            category: mainCat?.id || raw.category || 'medicines',
+            category: categorySlug || 'allopathic-medicines',
             categoryId: mainCat?.id || null,
+            subcategory: subcategorySlug || '',
             subcategoryId: subCat?.id || null,
-            brand: brandName,
+            brand: resolvedBrand,
             brandId: brandCat?.id || null,
             manufacturer: raw.manufacturer || '',
             price, mrp,
