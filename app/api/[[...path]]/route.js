@@ -1,6 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongo';
+import { finalizeOrder } from '@/lib/orders';
 import { PRODUCTS, CATEGORIES } from '@/lib/seed-data';
 import { CATEGORY_SEED } from '@/lib/categories';
 import { v4 as uuidv4 } from 'uuid';
@@ -74,6 +75,304 @@ function sanitizeImages(images) {
   return images.filter(url => typeof url === 'string' && url.startsWith('http') && !url.startsWith('data:'));
 }
 
+const BULK_IMPORT_LIMIT = 200;
+
+async function bulkImportProducts(db, rawItems = []) {
+  const items = Array.isArray(rawItems) ? rawItems.slice(0, BULK_IMPORT_LIMIT) : [];
+  const results = { created: 0, updated: 0, failed: 0, errors: [] };
+  const startTime = Date.now();
+  if (items.length === 0) return results;
+
+  const allCats = await db.collection('categories').find({}, { projection: { _id: 0 } }).toArray();
+  const findCatRaw = (val) => {
+    if (!val) return null;
+    const str = String(val).trim();
+    const lower = str.toLowerCase();
+    return allCats.find(c => c.id === val || c.slug === lower || c.name.toLowerCase() === lower);
+  };
+  const categorySynonyms = {
+    'allopathy': 'allopathic-medicines',
+    'allopathic': 'allopathic-medicines',
+    'cat allopathy': 'allopathic-medicines',
+    'cat allopathic': 'allopathic-medicines',
+    'cat allopathic medicines': 'allopathic-medicines',
+    'allopathic medicines': 'allopathic-medicines',
+    'ayurvedic': 'ayurvedic-medicines',
+    'ayurveda': 'ayurvedic-medicines',
+    'cat ayurvedic': 'ayurvedic-medicines',
+    'cat ayurvedic medicines': 'ayurvedic-medicines',
+    'cat ayurveda': 'ayurvedic-medicines',
+    'ayurvedic medicines': 'ayurvedic-medicines',
+    'homeopathy': 'homeopathic-medicines',
+    'homeopathic': 'homeopathic-medicines',
+    'cat homeopathic': 'homeopathic-medicines',
+    'cat homeopathy': 'homeopathic-medicines',
+    'homeopathic medicines': 'homeopathic-medicines',
+    'surgicals': 'surgical-products',
+    'cat surgicals': 'surgical-products',
+    'surgical': 'surgical-products',
+    'surgical products': 'surgical-products',
+    'generic': 'generic',
+    'cat generic': 'generic',
+    'generic medicines': 'generic',
+    'cat generic medicines': 'generic',
+  };
+  const normalizeCategoryValue = (val) => {
+    if (!val) return '';
+    const trimmed = String(val).trim();
+    const lower = trimmed.toLowerCase();
+    if (categorySynonyms[lower]) return categorySynonyms[lower];
+    const withoutPrefix = lower.startsWith('cat ')
+      ? lower.replace(/^cat\s+/, '')
+      : lower;
+    if (categorySynonyms[withoutPrefix]) return categorySynonyms[withoutPrefix];
+    return withoutPrefix;
+  };
+  const findCat = (val) => findCatRaw(normalizeCategoryValue(val) || val);
+  const findBrandCat = (val) => findCatRaw(val);
+
+  const namesAndBrands = items.map(raw => ({
+    name: raw.name?.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+    brand: (raw.brand || 'Generic').toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  })).filter(nb => nb.name);
+
+  let existingProducts = [];
+  if (namesAndBrands.length > 0) {
+    const orClause = namesAndBrands.map(nb => ({
+      name: { $regex: `^${nb.name}$`, $options: 'i' },
+      brand: { $regex: `^${nb.brand}$`, $options: 'i' }
+    }));
+    existingProducts = await db.collection('products').find({ $or: orClause }).toArray();
+  }
+
+  const existingMap = new Map();
+  for (const p of existingProducts) {
+    const key = (p.name || '').toLowerCase() + '|' + (p.brand || '').toLowerCase();
+    existingMap.set(key, p);
+  }
+
+  const toInsert = [];
+  const toUpdate = [];
+
+  for (const raw of items) {
+    try {
+      if (!raw.name) { results.failed++; results.errors.push('Missing name'); continue; }
+      if (String(raw.name).length > 300) { results.failed++; results.errors.push('Name too long'); continue; }
+      if (raw.description && String(raw.description).length > 5000) { results.failed++; results.errors.push('Description too long'); continue; }
+      if (raw.images && !Array.isArray(raw.images) && typeof raw.images !== 'string') { results.failed++; results.errors.push('Invalid images field'); continue; }
+      const rawImages = raw.images || (raw.imageUrl ? [raw.imageUrl] : (raw.image ? [raw.image] : []));
+      const images = sanitizeImages(rawImages);
+
+      const normalizedCategory = normalizeCategoryValue(raw.category);
+      const mainCat = findCat(normalizedCategory || raw.category);
+      const subCat = findCat(raw.subcategory);
+      const brandCat = findBrandCat(raw.brand);
+      const brandName = brandCat?.name || raw.brand || 'Generic';
+
+      const key = (raw.name || '').toLowerCase() + '|' + brandName.toLowerCase();
+      const existing = existingMap.get(key);
+
+      const price = Number(raw.price) || 0;
+      const mrp = Number(raw.mrp) || price;
+      const newStock = Number(raw.stock) || 0;
+
+      if (existing) {
+        toUpdate.push({ raw, existing, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory });
+      } else {
+        toInsert.push({ raw, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory });
+      }
+    } catch (e) { results.failed++; results.errors.push(e.message); }
+  }
+
+  for (const { raw, existing, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory } of toUpdate) {
+    try {
+      const oldStock = existing.stock || 0;
+      const stockDiff = newStock - oldStock;
+      const updateDoc = {
+        price,
+        mrp,
+        packSize: raw.packSize || raw.pack_size || existing.packSize || '',
+        image: images[0] || existing.image,
+        images: images.length ? images : existing.images,
+        stock: newStock,
+        prescription: String(raw.prescription || '').toLowerCase() === 'true' || raw.prescription === true,
+        description: raw.description || existing.description,
+        updatedAt: new Date().toISOString(),
+      };
+
+      const normalizedBrand = raw.brand ? brandName : (existing.brand || brandName);
+      if (normalizedBrand) updateDoc.brand = normalizedBrand;
+      if (brandCat?.id) updateDoc.brandId = brandCat.id;
+
+      const categorySlug = mainCat?.slug || normalizedCategory || (raw.category ? String(raw.category).trim().toLowerCase() : '');
+      if (mainCat?.id) updateDoc.categoryId = mainCat.id;
+      if (categorySlug) updateDoc.category = categorySlug;
+
+      const subcategorySlug = subCat?.slug || (raw.subcategory ? String(raw.subcategory).trim() : '');
+      if (subCat?.id) updateDoc.subcategoryId = subCat.id;
+      if (subcategorySlug) updateDoc.subcategory = subcategorySlug;
+
+      await db.collection('products').updateOne(
+        { _id: existing._id },
+        { $set: updateDoc }
+      );
+      if (stockDiff !== 0) {
+        await db.collection('inventory_logs').insertOne({
+          id: 'inv-' + uuidv4().slice(0, 8),
+          productId: existing.id,
+          productName: existing.name,
+          type: 'bulk-update',
+          qtyChange: stockDiff,
+          before: oldStock,
+          after: newStock,
+          reason: 'Bulk CSV import (stock update)',
+          createdAt: new Date().toISOString()
+        });
+      }
+      results.updated++;
+    } catch (e) { results.failed++; results.errors.push(e.message); }
+    if (Date.now() - startTime > 18000) break;
+  }
+
+  if (toInsert.length > 0 && (Date.now() - startTime) <= 18000) {
+    const newProducts = toInsert.map(({ raw, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory }) => {
+      const id = 'p-' + uuidv4().slice(0, 8);
+      const categorySlug = mainCat?.slug || normalizedCategory || (raw.category ? String(raw.category).trim().toLowerCase() : '');
+      const subcategorySlug = subCat?.slug || (raw.subcategory ? String(raw.subcategory).trim() : '');
+      const resolvedBrand = brandName || 'Generic';
+      return {
+        id, name: raw.name,
+        slug: raw.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        category: categorySlug || 'allopathic-medicines',
+        categoryId: mainCat?.id || null,
+        subcategory: subcategorySlug || '',
+        subcategoryId: subCat?.id || null,
+        brand: resolvedBrand,
+        brandId: brandCat?.id || null,
+        manufacturer: raw.manufacturer || '',
+        price, mrp,
+        packSize: raw.packSize || raw.pack_size || '',
+        image: images[0] || '', images,
+        stock: newStock,
+        prescription: String(raw.prescription || '').toLowerCase() === 'true' || raw.prescription === true,
+        rating: 4.5, ratingCount: 0, tags: [],
+        description: raw.description || '',
+        createdAt: new Date().toISOString(),
+      };
+    });
+
+    try {
+      const r = await db.collection('products').insertMany(newProducts, { ordered: false });
+      results.created = (r?.insertedCount != null ? r.insertedCount : newProducts.length);
+
+      const logsToInsert = newProducts.filter(p => p.stock > 0).map(p => ({
+        id: 'inv-' + uuidv4().slice(0, 8),
+        productId: p.id,
+        productName: p.name,
+        type: 'import',
+        qtyChange: p.stock,
+        before: 0,
+        after: p.stock,
+        reason: 'Bulk CSV import',
+        createdAt: new Date().toISOString()
+      }));
+      if (logsToInsert.length > 0) {
+        await db.collection('inventory_logs').insertMany(logsToInsert);
+      }
+    } catch (e) {
+      const failed = toInsert.length - (e?.result?.nInserted || 0);
+      results.failed += failed > 0 ? failed : toInsert.length;
+      results.errors.push('Bulk insert partial failure: ' + (e?.errmsg || e?.message || 'unknown'));
+    }
+  }
+
+  return results;
+}
+
+let importProcessorRunning = false;
+
+async function runImportProcessor() {
+  const db = await getDb();
+  try {
+    while (true) {
+      const jobRes = await db.collection('import_jobs').findOneAndUpdate(
+        { status: { $in: ['queued', 'processing'] } },
+        { $set: { status: 'processing', updatedAt: new Date().toISOString() }, $setOnInsert: { startedAt: new Date().toISOString() } },
+        { sort: { createdAt: 1 }, returnDocument: 'after' }
+      );
+      const job = jobRes.value;
+      if (!job) break;
+
+      const startedAt = job.startedAt || new Date().toISOString();
+      await db.collection('import_jobs').updateOne({ id: job.id }, { $set: { startedAt, updatedAt: new Date().toISOString() } });
+
+      try {
+        while (true) {
+          const chunkRes = await db.collection('import_job_chunks').findOneAndDelete(
+            { jobId: job.id },
+            { sort: { index: 1 } }
+          );
+          const chunk = chunkRes.value;
+          if (!chunk) break;
+
+          const chunkRows = Array.isArray(chunk.rows) ? chunk.rows : [];
+          const chunkResults = await bulkImportProducts(db, chunkRows);
+
+          const update = {
+            $inc: {
+              processed: chunkRows.length,
+              created: chunkResults.created || 0,
+              updated: chunkResults.updated || 0,
+              failed: chunkResults.failed || 0,
+              pendingChunks: -1,
+            },
+            $set: { updatedAt: new Date().toISOString() },
+          };
+          if (chunkResults.errors?.length) {
+            update.$push = { errors: { $each: chunkResults.errors } };
+          }
+          await db.collection('import_jobs').updateOne({ id: job.id }, update);
+        }
+
+        await db.collection('import_jobs').updateOne(
+          { id: job.id },
+          { $set: { status: 'completed', completedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), pendingChunks: 0 } }
+        );
+      } catch (err) {
+        console.error('[IMPORT] Job processing failed', err);
+        await db.collection('import_jobs').updateOne(
+          { id: job.id },
+          {
+            $set: {
+              status: 'failed',
+              errorMessage: err?.message || String(err),
+              updatedAt: new Date().toISOString(),
+              pendingChunks: 0,
+            },
+            $push: { errors: err?.message || String(err) },
+          }
+        );
+      } finally {
+        await db.collection('import_job_chunks').deleteMany({ jobId: job.id });
+      }
+    }
+  } finally {
+    importProcessorRunning = false;
+    const pending = await db.collection('import_jobs').countDocuments({ status: 'queued' });
+    if (pending > 0) {
+      startImportProcessor();
+    }
+  }
+}
+
+function startImportProcessor() {
+  if (importProcessorRunning) return;
+  importProcessorRunning = true;
+  runImportProcessor().catch((err) => {
+    console.error('[IMPORT] Processor crashed', err);
+  });
+}
+
 let seeded = false;
 async function seedOnce() {
   if (seeded) return;
@@ -81,6 +380,7 @@ async function seedOnce() {
     const db = await getDb();
     await ensureSeed(db);
     seeded = true;
+    startImportProcessor();
   } catch (e) { console.error('Seed error', e); }
 }
 
@@ -192,6 +492,9 @@ async function ensureIndexes(db) {
     await db.collection('chat_threads').createIndex({ userId: 1 });
     await db.collection('chat_threads').createIndex({ lastMessageAt: -1 });
     await db.collection('chat_messages').createIndex({ threadId: 1, createdAt: 1 });
+    await db.collection('import_jobs').createIndex({ id: 1 }, { unique: true });
+    await db.collection('import_jobs').createIndex({ status: 1, createdAt: 1 });
+    await db.collection('import_job_chunks').createIndex({ jobId: 1, index: 1 }, { unique: true });
   } catch (e) { console.error('Index creation error', e); }
 }
 
@@ -552,6 +855,17 @@ export async function GET(req, { params }) {
       const total = await db.collection('orders').countDocuments(filter);
       const orders = await db.collection('orders').find(filter, { projection: { _id: 0 } }).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).toArray();
       return json({ orders, total, page, limit });
+    }
+
+    if (path === 'admin/import/status') {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const id = searchParams.get('id');
+      if (!id) return json({ ok: false, error: 'id required' }, 400, 'none');
+      const job = await db.collection('import_jobs').findOne({ id }, { projection: { _id: 0 } });
+      if (!job) return json({ ok: false, error: 'Job not found' }, 404, 'none');
+      const pendingChunks = await db.collection('import_job_chunks').countDocuments({ jobId: id });
+      return json({ job: { ...job, pendingChunks } }, 200, 'none');
     }
 
     if (path === 'admin/stats') {
@@ -1262,123 +1576,12 @@ export async function POST(req, { params }) {
       return json({ ok: true, loginCode });
     }
 
-    // ── Razorpay: Create Order ─────────────────────────────────────────────────
-    if (path === 'razorpay/create-order') {
-      const keyId = process.env.RAZORPAY_KEY_ID;
-      const keySecret = process.env.RAZORPAY_KEY_SECRET;
-      if (!keyId || !keySecret) return json({ error: 'Razorpay not configured' }, 503);
-
-      const amountRupees = Number(body.amount);
-      if (!amountRupees || amountRupees < 1) return json({ error: 'Invalid amount' }, 400);
-      const amountPaise = Math.round(amountRupees * 100);
-      if (amountPaise < 100) return json({ error: 'Minimum order amount is ₹1' }, 400);
-
-      const receipt = 'rcpt_' + uuidv4().slice(0, 10);
-      const rzpRes = await fetch('https://api.razorpay.com/v1/orders', {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Basic ' + Buffer.from(`${keyId}:${keySecret}`).toString('base64'),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ amount: amountPaise, currency: 'INR', receipt }),
-      });
-      if (!rzpRes.ok) {
-        const err = await rzpRes.json().catch(() => ({}));
-        return json({ error: err.error?.description || 'Failed to create Razorpay order' }, 500);
-      }
-      const rzpOrder = await rzpRes.json();
-      return json({ orderId: rzpOrder.id, amount: rzpOrder.amount, currency: rzpOrder.currency });
-    }
-
-    // ── Razorpay: Verify Payment + Create DB Order ─────────────────────────────
-    if (path === 'razorpay/verify-payment') {
-      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderData } = body;
-      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-        return json({ error: 'Missing payment verification fields' }, 400);
-      }
-      const keySecret = process.env.RAZORPAY_KEY_SECRET;
-      if (!keySecret) return json({ error: 'Razorpay not configured' }, 503);
-
-      const expected = crypto
-        .createHmac('sha256', keySecret)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest('hex');
-      if (expected !== razorpay_signature) {
-        return json({ error: 'Payment verification failed — signature mismatch' }, 400);
-      }
-
-      // Signature verified — create the DB order
-      const id = 'ORD-' + Date.now().toString(36).toUpperCase() + '-' + uuidv4().slice(0, 4).toUpperCase();
-      const now = new Date().toISOString();
-      const od = orderData || {};
-      const order = {
-        id,
-        userId: od.userId || 'guest',
-        items: od.items || [],
-        address: od.address || {},
-        payment: od.payment || 'ONLINE',
-        subtotal: od.subtotal || 0,
-        discount: od.discount || 0,
-        deliveryFee: od.deliveryFee || 0,
-        total: od.total || 0,
-        slotId: od.slotId || null,
-        slotDate: od.slotDate || null,
-        deliveryMethod: od.deliveryMethod || 'home',
-        status: 'Pending',
-        createdAt: now,
-        razorpayOrderId: razorpay_order_id,
-        razorpayPaymentId: razorpay_payment_id,
-        paymentStatus: 'Paid',
-        riderId: null, riderAssignedAt: null,
-        estimatedDelivery: new Date(Date.now() + 3 * 86400000).toISOString(),
-        trackingSteps: [
-          { label: 'Order Confirmed', done: true, time: now },
-          { label: 'Packed', done: false },
-          { label: 'Out for Delivery', done: false },
-          { label: 'Delivered', done: false },
-        ],
-      };
-      await db.collection('orders').insertOne({ ...order });
-      for (const it of (od.items || [])) {
-        const p = await db.collection('products').findOne({ id: it.id });
-        if (p) {
-          const before = p.stock;
-          const after = Math.max(0, before - it.qty);
-          await db.collection('products').updateOne({ id: it.id }, { $set: { stock: after } });
-          await db.collection('inventory_logs').insertOne({ id: 'inv-' + uuidv4().slice(0, 8), productId: it.id, productName: p.name, type: 'sale', qtyChange: -it.qty, before, after, reason: `Order ${id}`, createdAt: now });
-        }
-      }
-      return json({ ok: true, order });
-    }
-
     if (path === 'orders') {
-      const id = 'ORD-' + Date.now().toString(36).toUpperCase() + '-' + uuidv4().slice(0, 4).toUpperCase();
-      const now = new Date().toISOString();
-      const order = {
-        id, userId: body.userId || 'guest', items: body.items || [], address: body.address || {},
-        payment: body.payment || 'COD',
-        subtotal: body.subtotal || 0, discount: body.discount || 0, deliveryFee: body.deliveryFee || 0, total: body.total || 0,
-        slotId: body.slotId || null, slotDate: body.slotDate || null,
-        deliveryMethod: body.deliveryMethod || 'home',
-        status: 'Pending', createdAt: now,
-        riderId: null, riderAssignedAt: null,
-        estimatedDelivery: new Date(Date.now() + 3 * 86400000).toISOString(),
-        trackingSteps: [
-          { label: 'Order Confirmed', done: true, time: now },
-          { label: 'Packed', done: false }, { label: 'Out for Delivery', done: false }, { label: 'Delivered', done: false },
-        ],
-      };
-      await db.collection('orders').insertOne({ ...order });
-      // Reduce stock for each item
-      for (const it of (body.items || [])) {
-        const p = await db.collection('products').findOne({ id: it.id });
-        if (p) {
-          const before = p.stock;
-          const after = Math.max(0, before - it.qty);
-          await db.collection('products').updateOne({ id: it.id }, { $set: { stock: after } });
-          await db.collection('inventory_logs').insertOne({ id: 'inv-' + uuidv4().slice(0, 8), productId: it.id, productName: p.name, type: 'sale', qtyChange: -it.qty, before, after, reason: `Order ${id}`, createdAt: now });
-        }
-      }
+      const order = await finalizeOrder(db, body, {
+        paymentMethod: body.payment === 'COD' ? 'COD' : 'Online',
+        paymentStatus: body.payment === 'COD' ? 'Pending' : 'Paid',
+        status: 'Pending',
+      });
       return json({ order });
     }
 
@@ -1406,225 +1609,57 @@ export async function POST(req, { params }) {
       return json({ product });
     }
 
+    if (path === 'admin/import/start') {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const rows = Array.isArray(body.rows) ? body.rows : [];
+      if (!rows.length) return json({ ok: false, error: 'rows array required' }, 400);
+      if (rows.length > 50000) return json({ ok: false, error: 'Too many rows in one import (max 50k)' }, 400);
+      const estimateBytes = Buffer.byteLength(JSON.stringify(rows), 'utf8');
+      if (estimateBytes > 12 * 1024 * 1024) {
+        return json({ ok: false, error: 'Import payload too large (>12MB). Please split into smaller files.' }, 413);
+      }
+
+      const now = new Date().toISOString();
+      const jobId = 'imp-' + uuidv4().slice(0, 8);
+      const chunkSize = BULK_IMPORT_LIMIT;
+      const chunks = [];
+      for (let i = 0; i < rows.length; i += chunkSize) {
+        const slice = rows.slice(i, i + chunkSize);
+        chunks.push({ jobId, index: chunks.length, rows: slice, createdAt: now });
+      }
+
+      const jobDoc = {
+        id: jobId,
+        status: 'queued',
+        total: rows.length,
+        processed: 0,
+        created: 0,
+        updated: 0,
+        failed: 0,
+        errors: [],
+        createdAt: now,
+        updatedAt: now,
+        startedAt: null,
+        completedAt: null,
+        chunkSize,
+        pendingChunks: chunks.length,
+        initiatedBy: admin.user?.id || 'admin',
+        initiatedEmail: admin.user?.email || '',
+      };
+
+      await db.collection('import_jobs').insertOne(jobDoc);
+      if (chunks.length > 0) {
+        await db.collection('import_job_chunks').insertMany(chunks, { ordered: true });
+      }
+
+      startImportProcessor();
+      return json({ ok: true, jobId, total: rows.length });
+    }
+
     // Bulk product import (with upsert - update existing or create new)
     if (path === 'products/bulk') {
-      const items = (body.products || []).slice(0, 200); // safety: cap batch to 200 per request
-      const results = { created: 0, updated: 0, failed: 0, errors: [] };
-      const startTime = Date.now();
-      // Pre-fetch all categories once for fast lookup
-      const allCats = await db.collection('categories').find({}, { projection: { _id: 0 } }).toArray();
-      const findCatRaw = (val) => {
-        if (!val) return null;
-        const str = String(val).trim();
-        const lower = str.toLowerCase();
-        return allCats.find(c => c.id === val || c.slug === lower || c.name.toLowerCase() === lower);
-      };
-      const categorySynonyms = {
-        'allopathy': 'allopathic-medicines',
-        'allopathic': 'allopathic-medicines',
-        'cat allopathy': 'allopathic-medicines',
-        'cat allopathic': 'allopathic-medicines',
-        'cat allopathic medicines': 'allopathic-medicines',
-        'allopathic medicines': 'allopathic-medicines',
-        'ayurvedic': 'ayurvedic-medicines',
-        'ayurveda': 'ayurvedic-medicines',
-        'cat ayurvedic': 'ayurvedic-medicines',
-        'cat ayurvedic medicines': 'ayurvedic-medicines',
-        'cat ayurveda': 'ayurvedic-medicines',
-        'ayurvedic medicines': 'ayurvedic-medicines',
-        'homeopathy': 'homeopathic-medicines',
-        'homeopathic': 'homeopathic-medicines',
-        'cat homeopathic': 'homeopathic-medicines',
-        'cat homeopathy': 'homeopathic-medicines',
-        'homeopathic medicines': 'homeopathic-medicines',
-        'surgicals': 'surgical-products',
-        'cat surgicals': 'surgical-products',
-        'surgical': 'surgical-products',
-        'surgical products': 'surgical-products',
-        'generic': 'generic',
-        'cat generic': 'generic',
-        'generic medicines': 'generic',
-        'cat generic medicines': 'generic',
-      };
-      const normalizeCategoryValue = (val) => {
-        if (!val) return '';
-        const trimmed = String(val).trim();
-        const lower = trimmed.toLowerCase();
-        if (categorySynonyms[lower]) return categorySynonyms[lower];
-        const withoutPrefix = lower.startsWith('cat ')
-          ? lower.replace(/^cat\s+/, '')
-          : lower;
-        if (categorySynonyms[withoutPrefix]) return categorySynonyms[withoutPrefix];
-        return withoutPrefix;
-      };
-      const findCat = (val) => findCatRaw(normalizeCategoryValue(val) || val);
-      const findBrandCat = (val) => findCatRaw(val);
-      
-      // Pre-fetch ALL existing products in this batch in ONE query (much faster!)
-      const namesAndBrands = items.map(raw => ({
-        name: raw.name?.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-        brand: (raw.brand || 'Generic').toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      })).filter(nb => nb.name);
-      
-      let existingProducts = [];
-      if (namesAndBrands.length > 0) {
-        // Build OR query for all products in batch
-        const orClause = namesAndBrands.map(nb => ({
-          name: { $regex: `^${nb.name}$`, $options: 'i' },
-          brand: { $regex: `^${nb.brand}$`, $options: 'i' }
-        }));
-        existingProducts = await db.collection('products').find({ $or: orClause }).toArray();
-      }
-      
-      // Create lookup map for fast access
-      const existingMap = new Map();
-      for (const p of existingProducts) {
-        const key = (p.name || '').toLowerCase() + '|' + (p.brand || '').toLowerCase();
-        existingMap.set(key, p);
-      }
-      
-      // Separate products into insert and update lists
-      const toInsert = [];
-      const toUpdate = [];
-      
-      for (const raw of items) {
-        try {
-          if (!raw.name) { results.failed++; results.errors.push('Missing name'); continue; }
-          if (String(raw.name).length > 300) { results.failed++; results.errors.push('Name too long'); continue; }
-          if (raw.description && String(raw.description).length > 5000) { results.failed++; results.errors.push('Description too long'); continue; }
-          if (raw.images && !Array.isArray(raw.images) && typeof raw.images !== 'string') { results.failed++; results.errors.push('Invalid images field'); continue; }
-          const rawImages = raw.images || (raw.imageUrl ? [raw.imageUrl] : (raw.image ? [raw.image] : []));
-          const images = sanitizeImages(rawImages);
-
-          const normalizedCategory = normalizeCategoryValue(raw.category);
-          const mainCat = findCat(normalizedCategory || raw.category);
-          const subCat = findCat(raw.subcategory);
-          const brandCat = findBrandCat(raw.brand);
-          const brandName = brandCat?.name || raw.brand || 'Generic';
-          
-          const key = (raw.name || '').toLowerCase() + '|' + brandName.toLowerCase();
-          const existing = existingMap.get(key);
-
-          const price = Number(raw.price) || 0;
-          const mrp = Number(raw.mrp) || price;
-          const newStock = Number(raw.stock) || 0;
-
-          if (existing) {
-            toUpdate.push({ raw, existing, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory });
-          } else {
-            toInsert.push({ raw, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory });
-          }
-        } catch (e) { results.failed++; results.errors.push(e.message); }
-      }
-      
-      // Bulk update existing products
-      for (const { raw, existing, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory } of toUpdate) {
-        try {
-          const oldStock = existing.stock || 0;
-          const stockDiff = newStock - oldStock;
-          const updateDoc = {
-            price,
-            mrp,
-            packSize: raw.packSize || raw.pack_size || existing.packSize || '',
-            image: images[0] || existing.image,
-            images: images.length ? images : existing.images,
-            stock: newStock,
-            prescription: String(raw.prescription || '').toLowerCase() === 'true' || raw.prescription === true,
-            description: raw.description || existing.description,
-            updatedAt: new Date().toISOString(),
-          };
-
-          const normalizedBrand = raw.brand ? brandName : (existing.brand || brandName);
-          if (normalizedBrand) updateDoc.brand = normalizedBrand;
-          if (brandCat?.id) updateDoc.brandId = brandCat.id;
-
-          const categorySlug = mainCat?.slug || normalizedCategory || (raw.category ? String(raw.category).trim().toLowerCase() : '');
-          if (mainCat?.id) updateDoc.categoryId = mainCat.id;
-          if (categorySlug) updateDoc.category = categorySlug;
-
-          const subcategorySlug = subCat?.slug || (raw.subcategory ? String(raw.subcategory).trim() : '');
-          if (subCat?.id) updateDoc.subcategoryId = subCat.id;
-          if (subcategorySlug) updateDoc.subcategory = subcategorySlug;
-
-          await db.collection('products').updateOne(
-            { _id: existing._id },
-            { 
-              $set: updateDoc
-            }
-          );
-          if (stockDiff !== 0) {
-            await db.collection('inventory_logs').insertOne({ 
-              id: 'inv-' + uuidv4().slice(0, 8), 
-              productId: existing.id, 
-              productName: existing.name, 
-              type: 'bulk-update', 
-              qtyChange: stockDiff, 
-              before: oldStock, 
-              after: newStock, 
-              reason: 'Bulk CSV import (stock update)', 
-              createdAt: new Date().toISOString() 
-            });
-          }
-          results.updated++;
-        } catch (e) { results.failed++; results.errors.push(e.message); }
-        if (Date.now() - startTime > 18000) break; // 18s safety to avoid platform timeouts
-      }
-      
-      // Bulk insert new products
-      if (toInsert.length > 0 && (Date.now() - startTime) <= 18000) {
-        const newProducts = toInsert.map(({ raw, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory }) => {
-          const id = 'p-' + uuidv4().slice(0, 8);
-          const categorySlug = mainCat?.slug || normalizedCategory || (raw.category ? String(raw.category).trim().toLowerCase() : '');
-          const subcategorySlug = subCat?.slug || (raw.subcategory ? String(raw.subcategory).trim() : '');
-          const resolvedBrand = brandName || 'Generic';
-          return {
-            id, name: raw.name,
-            slug: raw.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-            category: categorySlug || 'allopathic-medicines',
-            categoryId: mainCat?.id || null,
-            subcategory: subcategorySlug || '',
-            subcategoryId: subCat?.id || null,
-            brand: resolvedBrand,
-            brandId: brandCat?.id || null,
-            manufacturer: raw.manufacturer || '',
-            price, mrp,
-            packSize: raw.packSize || raw.pack_size || '',
-            image: images[0] || '', images,
-            stock: newStock,
-            prescription: String(raw.prescription || '').toLowerCase() === 'true' || raw.prescription === true,
-            rating: 4.5, ratingCount: 0, tags: [],
-            description: raw.description || '',
-            createdAt: new Date().toISOString(),
-          };
-        });
-        
-        try {
-          const r = await db.collection('products').insertMany(newProducts, { ordered: false });
-          results.created = (r?.insertedCount != null ? r.insertedCount : newProducts.length);
-          
-          // Log inventory for new products with stock
-          const logsToInsert = newProducts.filter(p => p.stock > 0).map(p => ({
-            id: 'inv-' + uuidv4().slice(0, 8),
-            productId: p.id,
-            productName: p.name,
-            type: 'import',
-            qtyChange: p.stock,
-            before: 0,
-            after: p.stock,
-            reason: 'Bulk CSV import',
-            createdAt: new Date().toISOString()
-          }));
-          if (logsToInsert.length > 0) {
-            await db.collection('inventory_logs').insertMany(logsToInsert);
-          }
-        } catch (e) { 
-          // Continue on duplicate key or validation errors; count as failed
-          const failed = toInsert.length - (e?.result?.nInserted || 0);
-          results.failed += failed > 0 ? failed : toInsert.length; 
-          results.errors.push('Bulk insert partial failure: ' + (e?.errmsg || e?.message || 'unknown'));
-        }
-      }
-      
+      const results = await bulkImportProducts(db, body.products || []);
       return json(results);
     }
 

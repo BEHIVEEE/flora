@@ -1,12 +1,12 @@
 'use client';
 import { useRef, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { ChevronLeft, Upload, FileText, Check, X, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
-const BATCH_SIZE = 100; // Smaller batches to avoid serverless timeouts, especially on slow networks
+const BULK_IMPORT_LIMIT = 200;
+const BATCH_SIZE = BULK_IMPORT_LIMIT;
 
 const CSV_HEADERS = ['name', 'brand', 'category', 'subcategory', 'price', 'mrp', 'stock', 'packSize', 'description', 'prescription', 'imageUrl'];
 const SAMPLE = `name,brand,category,subcategory,price,mrp,stock,packSize,description,prescription,imageUrl
@@ -193,13 +193,14 @@ function canonicalizeStandardRows(raw) {
 }
 
 const Import = () => {
-  const router = useRouter();
   const fileRef = useRef(null);
   const [parsed, setParsed] = useState(null); // {headers, rows, format}
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState(null);
   const [categories, setCategories] = useState([]);
   const [progress, setProgress] = useState(null); // { current, total, currentBatch }
+  const [jobId, setJobId] = useState(null);
+  const pollRef = useRef(null);
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(d => setCategories(d.categories || []));
@@ -284,88 +285,111 @@ const Import = () => {
     URL.revokeObjectURL(url);
   };
 
+  const stopPolling = () => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
+
+  const pollStatus = async (id) => {
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/admin/import/status?id=${id}`);
+      if (res.status === 404) {
+        stopPolling();
+        setImporting(false);
+        setJobId(null);
+        if (typeof window !== 'undefined') window.localStorage.removeItem('flora-import-job');
+        return;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data?.job) {
+        const j = data.job;
+        const total = j.total || 0;
+        const processed = j.processed || 0;
+        const totalBatches = Math.max(1, Math.ceil(total / BULK_IMPORT_LIMIT));
+        const currentBatch = j.status === 'completed'
+          ? totalBatches
+          : Math.min(totalBatches, Math.floor(processed / BULK_IMPORT_LIMIT) + 1);
+        setProgress({
+          current: processed,
+          total,
+          currentBatch,
+          totalBatches,
+          status: j.status,
+          pendingChunks: j.pendingChunks ?? null,
+        });
+        if (j.status === 'completed' || j.status === 'failed') {
+          stopPolling();
+          setImporting(false);
+          setResult({
+            created: j.created || 0,
+            updated: j.updated || 0,
+            failed: j.failed || 0,
+            errors: j.errors || [],
+            status: j.status,
+            errorMessage: j.errorMessage,
+          });
+          setJobId(null);
+          if (typeof window !== 'undefined') window.localStorage.removeItem('flora-import-job');
+          toast[j.status === 'completed' ? 'success' : 'error'](j.status === 'completed' ? 'Import completed' : 'Import failed');
+        }
+      }
+    } catch (err) {
+      console.error('Poll failed', err);
+    }
+  };
+
   const submit = async () => {
     if (!parsed?.rows?.length) return;
     const valid = parsed.rows.filter(r => validate(r).length === 0);
     if (valid.length === 0) { toast.error('No valid rows to import'); return; }
-    
-    const totalBatches = Math.ceil(valid.length / BATCH_SIZE);
-    const totalProducts = valid.length;
-    let allResults = { created: 0, failed: 0, errors: [] };
-    
-    setImporting(true);
-    setProgress({ current: 0, total: totalProducts, currentBatch: 1, totalBatches });
-    
-    // Helper to post a batch with retry and auto-splitting for large payloads or timeouts
-    const sendBatch = async (batch, depth = 0) => {
-      const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 25000); // 25s client-side timeout
-      try {
-        const res = await fetch('/api/products/bulk', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ products: batch }),
-          signal: controller.signal,
-        });
-        clearTimeout(t);
-        if (!res.ok) {
-          // Entity too large or server cap reached: split batch
-          if ((res.status === 413 || res.status === 504 || res.status === 408) && batch.length > 25) {
-            const mid = Math.ceil(batch.length / 2);
-            const a = await sendBatch(batch.slice(0, mid), depth + 1);
-            const b = await sendBatch(batch.slice(mid), depth + 1);
-            return { created: (a.created || 0) + (b.created || 0), failed: (a.failed || 0) + (b.failed || 0), errors: [...(a.errors || []), ...(b.errors || [])] };
-          }
-          // For other non-OK statuses, try splitting once if still large
-          if (batch.length > 100) {
-            const mid = Math.ceil(batch.length / 2);
-            const a = await sendBatch(batch.slice(0, mid), depth + 1);
-            const b = await sendBatch(batch.slice(mid), depth + 1);
-            return { created: (a.created || 0) + (b.created || 0), failed: (a.failed || 0) + (b.failed || 0), errors: [...(a.errors || []), ...(b.errors || [])] };
-          }
-          const d = await res.json().catch(() => ({}));
-          return { created: d.created || 0, failed: (d.failed || 0) + batch.length, errors: [...(d.errors || []), `HTTP ${res.status}`] };
-        }
-        return await res.json();
-      } catch (err) {
-        clearTimeout(t);
-        // Network failure/timeout: split and retry if big enough
-        if (batch.length > 100) {
-          const mid = Math.ceil(batch.length / 2);
-          const a = await sendBatch(batch.slice(0, mid), depth + 1);
-          const b = await sendBatch(batch.slice(mid), depth + 1);
-          return { created: (a.created || 0) + (b.created || 0), failed: (a.failed || 0) + (b.failed || 0), errors: [...(a.errors || []), ...(b.errors || []), `Network: ${err?.message || 'Failed to fetch'}`] };
-        }
-        if (batch.length > 50) {
-          const mid = Math.ceil(batch.length / 2);
-          const a = await sendBatch(batch.slice(0, mid), depth + 1);
-          const b = await sendBatch(batch.slice(mid), depth + 1);
-          return { created: (a.created || 0) + (b.created || 0), failed: (a.failed || 0) + (b.failed || 0), errors: [...(a.errors || []), ...(b.errors || []), `Network: ${err?.message || 'Failed to fetch'}`] };
-        }
-        // Final small batch failed
-        return { created: 0, failed: batch.length, errors: [`Network: ${err?.message || 'Failed to fetch'}`] };
+    try {
+      setImporting(true);
+      setResult(null);
+      const totalBatches = Math.ceil(valid.length / BULK_IMPORT_LIMIT);
+      setProgress({ current: 0, total: valid.length, currentBatch: 1, totalBatches, status: 'queued', pendingChunks: totalBatches });
+      const res = await fetch('/api/admin/import/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: valid }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d?.error || `Import failed (${res.status})`);
       }
-    };
-
-    // Process in batches
-    for (let i = 0; i < valid.length; i += BATCH_SIZE) {
-      const batch = valid.slice(i, i + BATCH_SIZE);
-      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-      setProgress({ current: Math.min(i + batch.length, totalProducts), total: totalProducts, currentBatch: batchNum, totalBatches });
-
-      const d = await sendBatch(batch);
-      allResults.created += d.created || 0;
-      allResults.failed += d.failed || 0;
-      if (d.errors?.length) allResults.errors.push(...d.errors.map(e => `Batch ${batchNum}: ${e}`));
-
-      if (i + BATCH_SIZE < valid.length) await new Promise(r => setTimeout(r, 400));
+      const data = await res.json();
+      setJobId(data.jobId);
+      if (typeof window !== 'undefined') window.localStorage.setItem('flora-import-job', data.jobId);
+      setProgress({ current: 0, total: valid.length, currentBatch: 1, totalBatches, status: 'processing', pendingChunks: totalBatches });
+      pollStatus(data.jobId);
+      pollRef.current = setInterval(() => pollStatus(data.jobId), 3500);
+      toast.success(`Import started (${valid.length} products). You can navigate away, it will continue in background.`);
+    } catch (err) {
+      console.error('Import start failed', err);
+      setImporting(false);
+      setJobId(null);
+      if (typeof window !== 'undefined') window.localStorage.removeItem('flora-import-job');
+      toast.error(err?.message || 'Failed to start import');
     }
-    
-    setResult(allResults);
-    setProgress(null);
-    setImporting(false);
-    toast.success(`${allResults.created} products imported`);
   };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const existing = window.localStorage.getItem('flora-import-job');
+      if (existing) {
+        setJobId(existing);
+        setImporting(true);
+        setResult(null);
+        setProgress(prev => prev || { current: 0, total: 0, currentBatch: 1, totalBatches: 1, status: 'processing', pendingChunks: null });
+        pollStatus(existing);
+        pollRef.current = setInterval(() => pollStatus(existing), 3500);
+      }
+    }
+    return () => stopPolling();
+  }, []);
 
   return (
     <div className="space-y-5">
@@ -402,15 +426,18 @@ const Import = () => {
               {progress && (
                 <div className="mt-3 space-y-2">
                   <div className="flex justify-between text-xs text-slate-600">
-                    <span>Batch {progress.currentBatch} of {progress.totalBatches}</span>
+                    <span>Status: {progress.status || 'processing'}</span>
                     <span>{progress.current} / {progress.total} products</span>
                   </div>
                   <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-teal-600 transition-all duration-300" 
-                      style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                      style={{ width: `${progress.total ? Math.min(100, (progress.current / progress.total) * 100) : 0}%` }}
                     />
                   </div>
+                  {typeof progress.pendingChunks === 'number' && (
+                    <div className="text-[11px] text-slate-500">Remaining batches: {progress.pendingChunks}</div>
+                  )}
                 </div>
               )}
             </div>
@@ -418,7 +445,7 @@ const Import = () => {
               <Button variant="outline" onClick={() => { setParsed(null); }} className="rounded-full">Reset</Button>
               <Button onClick={submit} disabled={importing} className="bg-teal-600 hover:bg-teal-700 rounded-full font-semibold">
                 {importing ? (
-                  <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Importing...</>
+                  <><Loader2 className="w-4 h-4 mr-1 animate-spin" /> Import running...</>
                 ) : (
                   <><Check className="w-4 h-4 mr-1" /> Import {parsed.rows.filter(r => validate(r).length === 0).length} products</>
                 )}
@@ -464,13 +491,18 @@ const Import = () => {
 
       {result && (
         <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center">
-          <div className="w-16 h-16 mx-auto bg-emerald-100 rounded-full flex items-center justify-center mb-3"><Check className="w-8 h-8 text-emerald-600" /></div>
-          <h2 className="text-2xl font-black text-slate-900">Import Complete</h2>
+          <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-3 ${result.status === 'failed' ? 'bg-rose-100' : 'bg-emerald-100'}`}>
+            {result.status === 'failed' ? <X className="w-8 h-8 text-rose-600" /> : <Check className="w-8 h-8 text-emerald-600" />}
+          </div>
+          <h2 className="text-2xl font-black text-slate-900">{result.status === 'failed' ? 'Import Failed' : 'Import Complete'}</h2>
           <p className="text-slate-600 mt-1">
             <span className="font-bold text-emerald-600">{result.created}</span> created · 
-            <span className="font-bold text-blue-600"> {result.updated}</span> updated · 
+            <span className="font-bold text-blue-600"> {result.updated || 0}</span> updated · 
             <span className="font-bold text-rose-600"> {result.failed}</span> failed
           </p>
+          {result.errorMessage && (
+            <p className="mt-3 text-xs text-rose-600">{result.errorMessage}</p>
+          )}
           {result.errors?.length > 0 && <div className="mt-3 text-xs text-rose-700 bg-rose-50 rounded-xl p-3 max-w-md mx-auto text-left"><div className="font-bold mb-1">Errors</div><ul className="list-disc list-inside space-y-0.5">{result.errors.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}</ul></div>}
           <div className="mt-6 flex gap-2 justify-center">
             <Link href="/admin/products"><Button className="bg-teal-600 hover:bg-teal-700 rounded-full font-semibold">Back to Products</Button></Link>

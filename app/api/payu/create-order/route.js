@@ -27,7 +27,7 @@ export async function POST(req) {
       hash,
       payuUrl: process.env.PAYU_MODE === 'production'
         ? 'https://secure.payu.in/_payment'
-        : 'https://sandboxsecure.payu.in/_payment',
+        : 'https://test.payu.in/_payment',
     });
   } catch (error) {
     console.error('PayU order error:', error);
