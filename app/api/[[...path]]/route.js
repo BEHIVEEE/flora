@@ -1577,7 +1577,7 @@ export async function POST(req, { params }) {
     }
 
     if (path === 'orders') {
-      const order = await finalizeOrder(db, body, {
+      const result = await finalizeOrder(db, body, {
         paymentMethod: body.payment === 'COD' ? 'COD' : 'Online',
         paymentStatus: body.payment === 'COD' ? 'Pending' : 'Paid',
         status: 'Pending',
