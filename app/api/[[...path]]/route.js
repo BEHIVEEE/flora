@@ -504,7 +504,7 @@ async function ensureCategorySeed(db) {
     await db.collection('categories').updateOne(
       { slug: cat.slug },
       {
-        $set: { updatedAt: now, description: cat.description, sortOrder: cat.sortOrder, icon: cat.icon, type: cat.type, parentCategoryId: cat.parentCategoryId },
+        $set: { updatedAt: now, description: cat.description, sortOrder: cat.sortOrder, icon: cat.icon, type: cat.type },
         $setOnInsert: {
           ...cat,
           createdAt: now,
