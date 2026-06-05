@@ -36,7 +36,6 @@ const PDP = () => {
   const cartKey = data ? `${data.product.id}::${selectedVariant?.id || ''}` : null;
   const inCart = data && items.some(i => (i.cartKey || i.id) === (cartKey || data.product.id));
 
-  if (loading) return <div className="container max-w-7xl mx-auto px-4 py-10"><div className="grid md:grid-cols-2 gap-8"><div className="aspect-square skeleton rounded-3xl" /><div><div className="h-8 w-3/4 skeleton rounded mb-3" /><div className="h-6 w-1/3 skeleton rounded mb-3" /><div className="h-24 skeleton rounded" /></div></div></div>;
   const p = data?.product;
   const activePrice = selectedVariant?.price ?? p?.price ?? 0;
   const activeMrp = selectedVariant?.mrp ?? p?.mrp ?? 0;
@@ -54,7 +53,24 @@ const PDP = () => {
     setQty(prev => clampQty(prev));
   }, [activeStock, p?.id]);
 
-  if (!p) return <div className="container max-w-7xl mx-auto px-4 py-10 text-center">Product not found</div>;
+  if (loading) {
+    return (
+      <div className="container max-w-7xl mx-auto px-4 py-10">
+        <div className="grid md:grid-cols-2 gap-8">
+          <div className="aspect-square skeleton rounded-3xl" />
+          <div>
+            <div className="h-8 w-3/4 skeleton rounded mb-3" />
+            <div className="h-6 w-1/3 skeleton rounded mb-3" />
+            <div className="h-24 skeleton rounded" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!p) {
+    return <div className="container max-w-7xl mx-auto px-4 py-10 text-center">Product not found</div>;
+  }
 
   const decreaseQty = () => setQty(q => Math.max(1, q - 1));
   const increaseQty = () => {
