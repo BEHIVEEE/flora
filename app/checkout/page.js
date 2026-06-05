@@ -112,16 +112,17 @@ const CheckoutPage = () => {
     setPlacing(true);
     try {
       const orderId = `FLC-${Date.now()}`;
-      const productInfo = `Order · ${items.length} item${items.length > 1 ? 's' : ''}`;
+      const productInfo = `Order ${items.length} item${items.length > 1 ? 's' : ''}`;
       const res = await fetch('/api/payu/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: Math.round(total * 100) / 100,
+          amount: (Math.round(total * 100) / 100).toFixed(2),
           orderId,
           email: address.email || 'customer@florachemist.online',
           phone: address.phone,
           name: address.name,
+          udf1: JSON.stringify(orderPayload()),
           productInfo,
         }),
       });
@@ -154,7 +155,9 @@ const CheckoutPage = () => {
         hash: data.hash,
         surl: `${window.location.origin}/api/payu/success`,
         furl: `${window.location.origin}/api/payu/failure`,
+        service_provider: 'payu_paisa',
         udf1: JSON.stringify(orderPayload()),
+        udf2: '', udf3: '', udf4: '', udf5: '', udf6: '', udf7: '', udf8: '', udf9: '', udf10: '',
       };
 
       Object.keys(fields).forEach(key => {
