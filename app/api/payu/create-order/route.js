@@ -3,7 +3,7 @@ import crypto from 'crypto';
 
 export async function POST(req) {
   try {
-    const { amount, orderId, email, phone, name } = await req.json();
+    const { amount, orderId, email, phone, name, productInfo } = await req.json();
 
     const merchantKey = process.env.PAYU_MERCHANT_KEY;
     const merchantSalt = process.env.PAYU_MERCHANT_SALT;
@@ -12,8 +12,10 @@ export async function POST(req) {
       return NextResponse.json({ error: 'PayU not configured' }, { status: 503 });
     }
 
+    const productInfoValue = productInfo || 'Order';
+
     // Generate hash for PayU
-    const hashInput = `${merchantKey}|${orderId}|${amount}|Order|${name}|${email}|||||||||||${merchantSalt}`;
+    const hashInput = `${merchantKey}|${orderId}|${amount}|${productInfoValue}|${name}|${email}|||||||||||${merchantSalt}`;
     const hash = crypto.createHash('sha512').update(hashInput).digest('hex');
 
     return NextResponse.json({
@@ -24,6 +26,7 @@ export async function POST(req) {
       email,
       phone,
       name,
+      productInfo: productInfoValue,
       hash,
       payuUrl: process.env.PAYU_MODE === 'production'
         ? 'https://secure.payu.in/_payment'

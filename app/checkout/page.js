@@ -112,6 +112,7 @@ const CheckoutPage = () => {
     setPlacing(true);
     try {
       const orderId = `FLC-${Date.now()}`;
+      const productInfo = `Order · ${items.length} item${items.length > 1 ? 's' : ''}`;
       const res = await fetch('/api/payu/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,6 +122,7 @@ const CheckoutPage = () => {
           email: address.email || 'customer@florachemist.online',
           phone: address.phone,
           name: address.name,
+          productInfo,
         }),
       });
       const data = await res.json();
@@ -145,7 +147,7 @@ const CheckoutPage = () => {
         key: data.merchantKey,
         txnid: data.orderId,
         amount: data.amount,
-        productinfo: `Order · ${items.length} item${items.length > 1 ? 's' : ''}`,
+        productinfo: data.productInfo,
         firstname: data.name,
         email: data.email,
         phone: data.phone,
