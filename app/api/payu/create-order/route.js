@@ -13,9 +13,14 @@ export async function POST(req) {
     }
 
     const productInfoValue = productInfo || 'Order';
+    const udf1 = '';
+    const udf2 = '';
+    const udf3 = '';
+    const udf4 = '';
+    const udf5 = '';
 
-    // Generate hash for PayU
-    const hashInput = `${merchantKey}|${orderId}|${amount}|${productInfoValue}|${name}|${email}|||||||||||${merchantSalt}`;
+    // Generate hash for PayU (official formula: key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT)
+    const hashInput = `${merchantKey}|${orderId}|${amount}|${productInfoValue}|${name}|${email}|${udf1}|${udf2}|${udf3}|${udf4}|${udf5}||||||${merchantSalt}`;
     const hash = crypto.createHash('sha512').update(hashInput).digest('hex');
 
     return NextResponse.json({
