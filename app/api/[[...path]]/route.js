@@ -1582,7 +1582,13 @@ export async function POST(req, { params }) {
         paymentStatus: body.payment === 'COD' ? 'Pending' : 'Paid',
         status: 'Pending',
       });
-      return json({ order });
+      if (result && result.error === 'insufficient_stock') {
+        return json({ ok: false, error: 'insufficient_stock', shortages: result.shortages }, 409);
+      }
+      if (result && result.error) {
+        return json({ ok: false, error: result.error }, 400);
+      }
+      return json({ order: result });
     }
 
     if (path === 'products') {

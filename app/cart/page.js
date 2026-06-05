@@ -4,6 +4,7 @@ import { useCart } from '@/components/CartProvider';
 import { useSettings } from '@/components/SettingsProvider';
 import { Button } from '@/components/ui/button';
 import { Minus, Plus, Trash2, Tag, ShieldCheck, Truck, ArrowRight, ShoppingBag } from 'lucide-react';
+import { toast } from 'sonner';
 
 const CartPage = () => {
   const { items, updateQty, removeItem, subtotal, savings, totalQty } = useCart() || {};
@@ -48,7 +49,19 @@ const CartPage = () => {
                     <div className="inline-flex items-center border border-slate-300 rounded-full self-start sm:self-auto">
                       <button onClick={() => updateQty(i.cartKey || i.id, i.qty - 1)} className="w-8 h-8 hover:bg-slate-50"><Minus className="w-3.5 h-3.5 mx-auto" /></button>
                       <span className="w-8 text-center text-sm font-bold">{i.qty}</span>
-                      <button onClick={() => updateQty(i.cartKey || i.id, i.qty + 1)} className="w-8 h-8 hover:bg-slate-50"><Plus className="w-3.5 h-3.5 mx-auto" /></button>
+                      <button
+                        onClick={() => {
+                          const available = Number(i.variantId ? (i.variantStock ?? i.stock) : i.stock) || 0;
+                          if (available && i.qty >= available) {
+                            toast.error(`Only ${available} left in stock`);
+                            return;
+                          }
+                          updateQty(i.cartKey || i.id, i.qty + 1);
+                        }}
+                        className="w-8 h-8 hover:bg-slate-50"
+                      >
+                        <Plus className="w-3.5 h-3.5 mx-auto" />
+                      </button>
                     </div>
                     <div className="text-right">
                       <div className="font-bold text-slate-900">₹{i.price * i.qty}</div>

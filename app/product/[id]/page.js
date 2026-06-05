@@ -46,10 +46,35 @@ const PDP = () => {
   const activePackSize = selectedVariant?.packSize || p.packSize;
   const discount = activeMrp > 0 ? Math.round(((activeMrp - activePrice) / activeMrp) * 100) : 0;
   const canPurchase = activeStock > 0;
+  const clampQty = (value) => {
+    if (!canPurchase) return 1;
+    return Math.min(activeStock, Math.max(1, value));
+  };
+
+  useEffect(() => {
+    setQty(prev => clampQty(prev));
+  }, [activeStock]);
+
+  const decreaseQty = () => setQty(q => Math.max(1, q - 1));
+  const increaseQty = () => {
+    if (!canPurchase) return;
+    setQty(prev => {
+      if (activeStock && prev >= activeStock) {
+        toast.error(`Only ${activeStock} available in stock`);
+        return activeStock;
+      }
+      return prev + 1;
+    });
+  };
 
   const handleAdd = async () => {
     if (p.hasVariants && !selectedVariant) {
       toast.error('Please select a pack size');
+      return;
+    }
+    if (canPurchase && qty > activeStock) {
+      setQty(activeStock);
+      toast.error(`Only ${activeStock} available in stock`);
       return;
     }
     setAdding(true);
@@ -58,6 +83,9 @@ const PDP = () => {
     if (result?.ok === false) {
       if (result.error === 'rx_required') {
         toast.error('Prescription required', { description: 'Upload a prescription and get it approved by our pharmacist first.' });
+      } else if (result.error === 'insufficient_stock' || result.error === 'out_of_stock') {
+        if (canPurchase && activeStock) setQty(activeStock);
+        toast.error(result.message || 'This quantity exceeds available stock');
       } else {
         toast.error(result.message || 'Could not add to cart');
       }
@@ -316,9 +344,9 @@ const PDP = () => {
 
               <div className="mt-6 flex items-center gap-3">
                 <div className="inline-flex items-center border border-slate-300 rounded-full overflow-hidden">
-                  <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-10 h-11 hover:bg-slate-50"><Minus className="w-4 h-4 mx-auto" /></button>
+                  <button onClick={decreaseQty} className="w-10 h-11 hover:bg-slate-50"><Minus className="w-4 h-4 mx-auto" /></button>
                   <span className="w-10 text-center font-bold">{qty}</span>
-                  <button onClick={() => setQty(q => q + 1)} className="w-10 h-11 hover:bg-slate-50"><Plus className="w-4 h-4 mx-auto" /></button>
+                  <button onClick={increaseQty} className="w-10 h-11 hover:bg-slate-50"><Plus className="w-4 h-4 mx-auto" /></button>
                 </div>
                 {inCart ? (
                   <Link href="/cart" className="flex-1"><Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-12 rounded-full font-bold shadow-lift"><Check className="w-4 h-4 mr-2" /> Go to Cart</Button></Link>
@@ -381,9 +409,9 @@ const PDP = () => {
               {activeMrp > activePrice && <div className="text-[10px] text-slate-400 line-through">₹{activeMrp}</div>}
             </div>
             <div className="inline-flex items-center border border-slate-300 rounded-full overflow-hidden">
-              <button onClick={() => setQty(q => Math.max(1, q - 1))} className="w-8 h-9"><Minus className="w-3.5 h-3.5 mx-auto" /></button>
+              <button onClick={decreaseQty} className="w-8 h-9"><Minus className="w-3.5 h-3.5 mx-auto" /></button>
               <span className="w-6 text-center text-sm font-bold">{qty}</span>
-              <button onClick={() => setQty(q => q + 1)} className="w-8 h-9"><Plus className="w-3.5 h-3.5 mx-auto" /></button>
+              <button onClick={increaseQty} className="w-8 h-9"><Plus className="w-3.5 h-3.5 mx-auto" /></button>
             </div>
             {inCart ? (
               <Link href="/cart" className="flex-1"><Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-10 rounded-full font-bold text-sm"><Check className="w-3.5 h-3.5 mr-1.5" /> Go to Cart</Button></Link>

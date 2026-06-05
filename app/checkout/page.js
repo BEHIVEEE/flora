@@ -93,8 +93,16 @@ const CheckoutPage = () => {
         body: JSON.stringify(orderPayload()),
       });
       const data = await res.json();
-      if (data.order) { clear(); toast.success('Order placed! 🎉'); router.push(`/order-confirmed?id=${data.order.id}`); }
-      else toast.error(data.error || 'Failed to place order');
+      if (data?.order) {
+        clear();
+        toast.success('Order placed! 🎉');
+        router.push(`/order-confirmed?id=${data.order.id}`);
+      } else if (data?.error === 'insufficient_stock') {
+        const names = (data.shortages || []).map(s => `${s.name} (avail: ${s.available})`).join(', ');
+        toast.error('Not enough stock', { description: names || 'Reduce quantities and try again.' });
+      } else {
+        toast.error(data?.error || 'Failed to place order');
+      }
     } catch { toast.error('Network error'); }
     finally { setPlacing(false); }
   };
@@ -116,7 +124,16 @@ const CheckoutPage = () => {
         }),
       });
       const data = await res.json();
-      if (!res.ok) { toast.error(data.error || 'Could not initiate payment'); setPlacing(false); return; }
+      if (!res.ok) {
+        if (data?.error === 'insufficient_stock') {
+          const names = (data.shortages || []).map(s => `${s.name} (avail: ${s.available})`).join(', ');
+          toast.error('Not enough stock', { description: names || 'Reduce quantities and try again.' });
+        } else {
+          toast.error(data.error || 'Could not initiate payment');
+        }
+        setPlacing(false);
+        return;
+      }
 
       // Create hidden form and submit to PayU
       const form = document.createElement('form');

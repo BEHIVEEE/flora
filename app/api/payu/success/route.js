@@ -48,7 +48,7 @@ export async function POST(req) {
     if (orderPayload.total == null) orderPayload.total = amountNumber;
     if (!orderPayload.payment) orderPayload.payment = 'PayU';
 
-    const order = await finalizeOrder(db, orderPayload, {
+    const result = await finalizeOrder(db, orderPayload, {
       id: txnid,
       paymentId: txnid,
       paymentMethod: 'PayU',
@@ -67,6 +67,15 @@ export async function POST(req) {
         },
       },
     });
+
+    if (result?.error === 'insufficient_stock') {
+      const shortageParam = encodeURIComponent(JSON.stringify(result.shortages || []));
+      return NextResponse.redirect(new URL(`/checkout?error=insufficient_stock&shortages=${shortageParam}`, req.url));
+    }
+    if (result?.error) {
+      return NextResponse.redirect(new URL(`/checkout?error=${encodeURIComponent(result.error)}`, req.url));
+    }
+    const order = result;
 
     return NextResponse.redirect(new URL(`/order-confirmed?id=${order.id}`, req.url));
   } catch (error) {

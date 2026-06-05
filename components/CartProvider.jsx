@@ -47,15 +47,16 @@ const CartProvider = ({ children }) => {
   useEffect(() => { if (hydrated) refreshRxStatus(); }, [hydrated, refreshRxStatus]);
 
   const addItem = useCallback(async (product, qty = 1, variant = null) => {
-    // Gate: stock validation
-    const currentStock = Number(product?.stock) || 0;
-    const existingInCart = items.find(i => i.id === product.id);
-    const existingQty = existingInCart?.qty || 0;
-    if (currentStock > 0 && existingQty + qty > currentStock) {
-      return { ok: false, error: 'insufficient_stock', message: `Only ${currentStock} available in stock` };
-    }
-    if (currentStock === 0) {
+    // Gate: stock validation (variant-aware)
+    const cartKey = `${product.id}::${variant?.id || ''}`;
+    const available = Number(variant?.stock ?? product?.stock ?? 0);
+    if (!available) {
       return { ok: false, error: 'out_of_stock', message: 'This item is currently out of stock' };
+    }
+    const existingInCart = items.find(i => (i.cartKey || `${i.id}::${i.variantId || ''}`) === cartKey);
+    const existingQty = existingInCart?.qty || 0;
+    if (existingQty + qty > available) {
+      return { ok: false, error: 'insufficient_stock', message: `Only ${available} available in stock` };
     }
     // Gate: prescription-required products need an approved Rx
     if (product?.prescription) {
@@ -65,7 +66,6 @@ const CartProvider = ({ children }) => {
         return { ok: false, error: 'rx_required', message: 'This item requires a valid prescription approved by our pharmacist.' };
       }
     }
-    const cartKey = `${product.id}::${variant?.id || ''}`;
     setItems(prev => {
       const exists = prev.find(i => i.cartKey === cartKey);
       if (exists) return prev.map(i => i.cartKey === cartKey ? { ...i, qty: i.qty + qty } : i);
@@ -73,6 +73,8 @@ const CartProvider = ({ children }) => {
         cartKey,
         id: product.id,
         variantId: variant?.id || null,
+        variantStock: variant?.stock ?? null,
+        stock: product.stock ?? null,
         name: product.name,
         price: variant?.price ?? product.price,
         mrp: variant?.mrp ?? product.mrp,
@@ -84,7 +86,7 @@ const CartProvider = ({ children }) => {
       }];
     });
     return { ok: true };
-  }, [refreshRxStatus]);
+  }, [items, refreshRxStatus]);
 
   const removeItem = useCallback((cartKey) => setItems(prev => prev.filter(i => (i.cartKey || i.id) !== cartKey)), []);
   const updateQty = useCallback((cartKey, qty) => setItems(prev => qty <= 0 ? prev.filter(i => (i.cartKey || i.id) !== cartKey) : prev.map(i => (i.cartKey || i.id) === cartKey ? { ...i, qty } : i)), []);

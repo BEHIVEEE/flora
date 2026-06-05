@@ -32,7 +32,7 @@ export async function POST(req) {
     if (orderPayload.total == null) orderPayload.total = amountNumber;
     if (!orderPayload.payment) orderPayload.payment = 'PayU';
 
-    const order = await finalizeOrder(db, orderPayload, {
+    const result = await finalizeOrder(db, orderPayload, {
       id: txnid,
       paymentId: txnid,
       paymentMethod: 'PayU',
@@ -51,6 +51,14 @@ export async function POST(req) {
         },
       },
     });
+
+    if (result?.error === 'insufficient_stock') {
+      return NextResponse.json({ error: 'insufficient_stock', shortages: result.shortages }, { status: 409 });
+    }
+    if (result?.error) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+    const order = result;
 
     return NextResponse.json({
       ok: true,
