@@ -37,24 +37,24 @@ const PDP = () => {
   const inCart = data && items.some(i => (i.cartKey || i.id) === (cartKey || data.product.id));
 
   if (loading) return <div className="container max-w-7xl mx-auto px-4 py-10"><div className="grid md:grid-cols-2 gap-8"><div className="aspect-square skeleton rounded-3xl" /><div><div className="h-8 w-3/4 skeleton rounded mb-3" /><div className="h-6 w-1/3 skeleton rounded mb-3" /><div className="h-24 skeleton rounded" /></div></div></div>;
-  if (!data?.product) return <div className="container max-w-7xl mx-auto px-4 py-10 text-center">Product not found</div>;
-
-  const p = data.product;
-  const activePrice = selectedVariant?.price ?? p.price;
-  const activeMrp = selectedVariant?.mrp ?? p.mrp;
-  const activeStock = selectedVariant?.stock ?? p.stock;
-  const activePackSize = selectedVariant?.packSize || p.packSize;
+  const p = data?.product;
+  const activePrice = selectedVariant?.price ?? p?.price ?? 0;
+  const activeMrp = selectedVariant?.mrp ?? p?.mrp ?? 0;
+  const activeStock = selectedVariant?.stock ?? p?.stock ?? 0;
+  const activePackSize = selectedVariant?.packSize || p?.packSize || '';
   const discount = activeMrp > 0 ? Math.round(((activeMrp - activePrice) / activeMrp) * 100) : 0;
-  const canPurchase = activeStock > 0;
+  const canPurchase = !!p && activeStock > 0;
   const clampQty = (value) => {
     if (!canPurchase) return 1;
     return Math.min(activeStock, Math.max(1, value));
   };
 
   useEffect(() => {
-    if (!data?.product) return;
+    if (!p) return;
     setQty(prev => clampQty(prev));
-  }, [activeStock, data?.product]);
+  }, [activeStock, p?.id]);
+
+  if (!p) return <div className="container max-w-7xl mx-auto px-4 py-10 text-center">Product not found</div>;
 
   const decreaseQty = () => setQty(q => Math.max(1, q - 1));
   const increaseQty = () => {
