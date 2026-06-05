@@ -47,6 +47,16 @@ const CartProvider = ({ children }) => {
   useEffect(() => { if (hydrated) refreshRxStatus(); }, [hydrated, refreshRxStatus]);
 
   const addItem = useCallback(async (product, qty = 1, variant = null) => {
+    // Gate: stock validation
+    const currentStock = Number(product?.stock) || 0;
+    const existingInCart = items.find(i => i.id === product.id);
+    const existingQty = existingInCart?.qty || 0;
+    if (currentStock > 0 && existingQty + qty > currentStock) {
+      return { ok: false, error: 'insufficient_stock', message: `Only ${currentStock} available in stock` };
+    }
+    if (currentStock === 0) {
+      return { ok: false, error: 'out_of_stock', message: 'This item is currently out of stock' };
+    }
     // Gate: prescription-required products need an approved Rx
     if (product?.prescription) {
       // Always do a live check so stale state doesn't block an already-approved Rx
