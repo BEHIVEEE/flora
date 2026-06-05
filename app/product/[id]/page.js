@@ -52,8 +52,9 @@ const PDP = () => {
   };
 
   useEffect(() => {
+    if (!data?.product) return;
     setQty(prev => clampQty(prev));
-  }, [activeStock]);
+  }, [activeStock, data?.product]);
 
   const decreaseQty = () => setQty(q => Math.max(1, q - 1));
   const increaseQty = () => {
