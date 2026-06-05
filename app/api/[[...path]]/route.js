@@ -501,17 +501,24 @@ async function ensureIndexes(db) {
 async function ensureCategorySeed(db) {
   const now = new Date().toISOString();
   for (const cat of CATEGORY_SEED) {
-    await db.collection('categories').updateOne(
-      { slug: cat.slug },
-      {
-        $set: { updatedAt: now, description: cat.description, sortOrder: cat.sortOrder, icon: cat.icon, type: cat.type },
-        $setOnInsert: {
-          ...cat,
-          createdAt: now,
-        },
+    const filter = { slug: cat.slug };
+    const baseUpdate = {
+      $set: {
+        updatedAt: now,
+        description: cat.description,
+        sortOrder: cat.sortOrder,
+        icon: cat.icon,
+        type: cat.type,
       },
-      { upsert: true }
-    );
+      $setOnInsert: {
+        ...cat,
+        createdAt: now,
+      },
+    };
+    await db.collection('categories').updateOne(filter, baseUpdate, { upsert: true });
+    if (Object.prototype.hasOwnProperty.call(cat, 'parentCategoryId')) {
+      await db.collection('categories').updateOne(filter, { $set: { parentCategoryId: cat.parentCategoryId ?? null } });
+    }
   }
 }
 
