@@ -14,15 +14,19 @@ export async function POST(req) {
     const email = formData.get('email');
     const phone = formData.get('phone');
     const hash = formData.get('hash');
-    const udf1 = formData.get('udf1');
+    const udf1 = formData.get('udf1') || '';
+    const udf2 = formData.get('udf2') || '';
+    const udf3 = formData.get('udf3') || '';
+    const udf4 = formData.get('udf4') || '';
+    const udf5 = formData.get('udf5') || '';
 
     const merchantSalt = process.env.PAYU_MERCHANT_SALT;
     if (!merchantSalt) {
       return NextResponse.json({ error: 'PayU not configured' }, { status: 503 });
     }
 
-    // Verify hash
-    const hashInput = `${merchantSalt}|${status}|||||||||||${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||||`;
+    // Verify hash (reverse hash formula)
+    const hashInput = `${merchantSalt}|${status}|||||||${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${process.env.PAYU_MERCHANT_KEY}`;
     const calculatedHash = crypto.createHash('sha512').update(hashInput).digest('hex');
 
     if (calculatedHash !== hash) {
