@@ -5,18 +5,20 @@ import { Loader2, Upload } from 'lucide-react';
 import { useImportJobContext } from '@/components/admin/ImportJobProvider';
 
 const ImportJobBanner = () => {
-  const { importing, progress, result } = useImportJobContext();
+  const { importing, progress, result, uploadInterrupted } = useImportJobContext();
 
   if (result || !importing || !progress) return null;
 
-  const isUploading = progress.status === 'uploading';
+  const isUploading = progress.status === 'uploading' && !uploadInterrupted;
   const pct = isUploading
     ? (progress.totalBatches ? Math.min(100, (progress.currentBatch / progress.totalBatches) * 100) : 0)
     : (progress.total ? Math.min(100, (progress.current / progress.total) * 100) : 0);
 
-  const label = isUploading
-    ? `Uploading batch ${progress.currentBatch} / ${progress.totalBatches}`
-    : `Importing ${progress.current.toLocaleString()} / ${progress.total.toLocaleString()} products`;
+  const label = uploadInterrupted
+    ? `Upload paused at batch ${progress.currentBatch} / ${progress.totalBatches} — tap to resume`
+    : isUploading
+      ? `Uploading batch ${progress.currentBatch} / ${progress.totalBatches}`
+      : `Importing ${progress.current.toLocaleString()} / ${progress.total.toLocaleString()} products`;
 
   return (
     <div className="sticky top-0 z-40 mb-4 -mt-2">
@@ -28,7 +30,9 @@ const ImportJobBanner = () => {
           {isUploading ? <Upload className="w-4 h-4" /> : <Loader2 className="w-4 h-4 animate-spin" />}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-bold truncate">Product import running in background</div>
+          <div className="text-sm font-bold truncate">
+            {uploadInterrupted ? 'Product import paused — action needed' : 'Product import running in background'}
+          </div>
           <div className="text-xs text-teal-100 mt-0.5">{label} · tap for details</div>
           <div className="mt-2 h-1.5 bg-white/20 rounded-full overflow-hidden">
             <div className="h-full bg-white transition-all duration-300" style={{ width: `${pct}%` }} />

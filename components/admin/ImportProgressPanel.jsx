@@ -22,6 +22,10 @@ const ImportProgressPanel = ({ progress, compact = false }) => {
     ? `Batch ${progress.currentBatch} / ${progress.totalBatches}`
     : `${(progress.current || 0).toLocaleString()} / ${(progress.total || 0).toLocaleString()} products`;
 
+  const remaining = isUploading
+    ? progress.remainingUploadChunks
+    : progress.pendingProcessingChunks;
+
   return (
     <div className={compact ? 'space-y-2' : 'mt-3 space-y-2'}>
       <div className="flex justify-between text-xs text-slate-600">
@@ -29,6 +33,7 @@ const ImportProgressPanel = ({ progress, compact = false }) => {
           {!isUploading && progress.status === 'processing' && (
             <Loader2 className="w-3 h-3 animate-spin text-teal-600" />
           )}
+          {isUploading && <Loader2 className="w-3 h-3 animate-spin text-teal-600" />}
           Status: {statusLabel}
         </span>
         <span>{countLabel}</span>
@@ -39,14 +44,19 @@ const ImportProgressPanel = ({ progress, compact = false }) => {
           style={{ width: `${pct}%` }}
         />
       </div>
-      {typeof progress.pendingChunks === 'number' && progress.pendingChunks > 0 && (
+      {typeof remaining === 'number' && remaining > 0 && (
         <div className="text-[11px] text-slate-500">
-          {isUploading ? 'Remaining upload batches' : 'Remaining processing batches'}: {progress.pendingChunks}
+          {isUploading ? 'Batches left to upload' : 'Batches left to process'}: {remaining}
         </div>
       )}
-      {!compact && (
+      {!compact && !isUploading && (
         <p className="text-[11px] text-slate-500">
-          You can reload or leave this page — the import continues on the server.
+          You can reload or leave this page — processing continues on the server.
+        </p>
+      )}
+      {!compact && isUploading && (
+        <p className="text-[11px] text-slate-500">
+          Keep this tab open while uploading. If interrupted, re-select the same file to resume.
         </p>
       )}
     </div>

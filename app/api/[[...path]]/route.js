@@ -291,6 +291,31 @@ async function bulkImportProducts(db, rawItems = []) {
 
 let importProcessorRunning = false;
 
+async function enrichImportJob(db, job) {
+  if (!job) return null;
+  const chunkCount = await db.collection('import_job_chunks').countDocuments({ jobId: job.id });
+  const expected = job.expectedChunks || 0;
+  const uploaded = job.status === 'uploading'
+    ? Math.max(job.uploadedChunks || 0, chunkCount)
+    : (job.uploadedChunks || 0);
+
+  if (job.status === 'uploading') {
+    return {
+      ...job,
+      uploadedChunks: uploaded,
+      remainingUploadChunks: Math.max(0, expected - uploaded),
+      pendingProcessingChunks: 0,
+    };
+  }
+
+  return {
+    ...job,
+    uploadedChunks: uploaded,
+    remainingUploadChunks: 0,
+    pendingProcessingChunks: chunkCount,
+  };
+}
+
 async function runImportProcessor() {
   const db = await getDb();
   try {
@@ -871,8 +896,7 @@ export async function GET(req, { params }) {
       if (!id) return json({ ok: false, error: 'id required' }, 400, 'none');
       const job = await db.collection('import_jobs').findOne({ id }, { projection: { _id: 0 } });
       if (!job) return json({ ok: false, error: 'Job not found' }, 404, 'none');
-      const pendingChunks = await db.collection('import_job_chunks').countDocuments({ jobId: id });
-      return json({ job: { ...job, pendingChunks } }, 200, 'none');
+      return json({ job: await enrichImportJob(db, job) }, 200, 'none');
     }
 
     if (path === 'admin/import/active') {
@@ -883,8 +907,7 @@ export async function GET(req, { params }) {
         { sort: { createdAt: -1 }, projection: { _id: 0 } }
       );
       if (!job) return json({ job: null }, 200, 'none');
-      const pendingChunks = await db.collection('import_job_chunks').countDocuments({ jobId: job.id });
-      return json({ job: { ...job, pendingChunks } }, 200, 'none');
+      return json({ job: await enrichImportJob(db, job) }, 200, 'none');
     }
 
     if (path === 'admin/stats') {
@@ -1644,7 +1667,11 @@ export async function POST(req, { params }) {
 
       const now = new Date().toISOString();
       const jobId = 'imp-' + uuidv4().slice(0, 8);
-      const expectedChunks = Math.ceil(total / BULK_IMPORT_LIMIT);
+      const uploadChunkSize = Math.min(
+        Math.max(Number(body.chunkSize) || BULK_IMPORT_LIMIT, 25),
+        BULK_IMPORT_LIMIT
+      );
+      const expectedChunks = Math.ceil(total / uploadChunkSize);
 
       await db.collection('import_jobs').insertOne({
         id: jobId,
@@ -1659,14 +1686,36 @@ export async function POST(req, { params }) {
         updatedAt: now,
         startedAt: null,
         completedAt: null,
-        chunkSize: BULK_IMPORT_LIMIT,
+        uploadChunkSize,
+        chunkSize: uploadChunkSize,
         pendingChunks: expectedChunks,
         expectedChunks,
         uploadedChunks: 0,
         initiatedBy: admin.user?.id || 'admin',
         initiatedEmail: admin.user?.email || '',
       });
-      return json({ ok: true, jobId, total, expectedChunks });
+      return json({ ok: true, jobId, total, expectedChunks, uploadChunkSize });
+    }
+
+    if (path === 'admin/import/cancel') {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const jobId = body.jobId;
+      if (!jobId) return json({ ok: false, error: 'jobId required' }, 400);
+      await db.collection('import_job_chunks').deleteMany({ jobId });
+      await db.collection('import_jobs').updateOne(
+        { id: jobId },
+        {
+          $set: {
+            status: 'failed',
+            errorMessage: 'Cancelled by user',
+            pendingChunks: 0,
+            updatedAt: new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+          },
+        }
+      );
+      return json({ ok: true, jobId });
     }
 
     if (path === 'admin/import/chunk') {

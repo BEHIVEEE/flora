@@ -198,12 +198,30 @@ const Import = () => {
   const fileRef = useRef(null);
   const [parsed, setParsed] = useState(null); // {headers, rows, format}
   const [categories, setCategories] = useState([]);
-  const { importing, result, progress, startImport, resetResult } = useImportJobContext();
+  const {
+    importing, result, progress, uploadInterrupted,
+    startImport, resumeImport, cancelImport, resetResult,
+  } = useImportJobContext();
   const hasActiveJob = importing && !result;
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(d => setCategories(d.categories || []));
   }, []);
+
+  const processParsedRows = async (finalRows, format) => {
+    if (uploadInterrupted) {
+      const valid = finalRows.filter(r => validate(r).length === 0);
+      if (!valid.length) { toast.error('No valid rows in file'); return; }
+      try {
+        await resumeImport(valid);
+        setParsed(null);
+      } catch (err) {
+        toast.error(err?.message || 'Failed to resume import');
+      }
+      return;
+    }
+    setParsed({ headers: CSV_HEADERS, rows: finalRows, format });
+  };
 
   const handleFile = async (f) => {
     if (!f) return;
@@ -225,13 +243,15 @@ const Import = () => {
         const raw = { headers, rows };
         const { format, rows: normRows } = detectAndNormalize(raw);
         const finalRows = (format === 'distributor' || format === 'productlist') ? normRows : canonicalizeStandardRows(raw);
-        setParsed({ headers: CSV_HEADERS, rows: finalRows, format });
-        if (format === 'distributor') {
-          toast.success(`Detected distributor invoice format · ${finalRows.length} products mapped`);
-        } else if (format === 'productlist') {
-          toast.success(`Detected ProductList format · ${finalRows.length} products mapped`);
-        } else {
-          toast.success(`Excel parsed · ${finalRows.length} rows`);
+        await processParsedRows(finalRows, format);
+        if (!uploadInterrupted) {
+          if (format === 'distributor') {
+            toast.success(`Detected distributor invoice format · ${finalRows.length} products mapped`);
+          } else if (format === 'productlist') {
+            toast.success(`Detected ProductList format · ${finalRows.length} products mapped`);
+          } else {
+            toast.success(`Excel parsed · ${finalRows.length} rows`);
+          }
         }
       } catch (err) {
         console.error('Excel parse error', err);
@@ -246,11 +266,13 @@ const Import = () => {
       const raw = parseCSV(e.target.result);
       const { format, rows } = detectAndNormalize(raw);
       const finalRows = (format === 'distributor' || format === 'productlist') ? rows : canonicalizeStandardRows(raw);
-      setParsed({ headers: CSV_HEADERS, rows: finalRows, format });
-      if (format === 'distributor') {
-        toast.success(`Detected distributor invoice format · ${finalRows.length} products mapped`);
-      } else if (format === 'productlist') {
-        toast.success(`Detected ProductList format · ${finalRows.length} products mapped`);
+      processParsedRows(finalRows, format);
+      if (!uploadInterrupted) {
+        if (format === 'distributor') {
+          toast.success(`Detected distributor invoice format · ${finalRows.length} products mapped`);
+        } else if (format === 'productlist') {
+          toast.success(`Detected ProductList format · ${finalRows.length} products mapped`);
+        }
       }
     };
     reader.readAsText(f);
@@ -310,18 +332,37 @@ const Import = () => {
 
       {hasActiveJob && !result && (
         <div className="bg-white border border-teal-200 rounded-2xl p-6 space-y-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center">
               <Loader2 className="w-6 h-6 animate-spin" />
             </div>
-            <div>
-              <div className="font-bold text-slate-900 text-lg">Import in progress</div>
+            <div className="flex-1 min-w-[200px]">
+              <div className="font-bold text-slate-900 text-lg">
+                {uploadInterrupted ? 'Upload paused' : 'Import in progress'}
+              </div>
               <div className="text-sm text-slate-500">
-                Running in the background on the server. Reloading this page is safe.
+                {uploadInterrupted
+                  ? 'Upload was interrupted (page reload or connection drop). Re-select the same file to continue.'
+                  : 'Processing runs on the server. Reloading is safe after upload finishes.'}
               </div>
             </div>
+            <Button variant="outline" onClick={cancelImport} className="rounded-full text-rose-600 border-rose-200 hover:bg-rose-50">
+              Cancel import
+            </Button>
           </div>
-          <ImportProgressPanel progress={progress} />
+
+          {uploadInterrupted ? (
+            <div
+              onClick={() => fileRef.current?.click()}
+              className="border-2 border-dashed border-amber-300 bg-amber-50/50 rounded-xl p-6 text-center cursor-pointer hover:bg-amber-50"
+            >
+              <div className="font-semibold text-amber-900">Click to re-select your XLS/CSV file and resume</div>
+              <div className="text-xs text-amber-700 mt-1">Upload will continue from batch {(progress?.currentBatch || 0) + 1} of {progress?.totalBatches || '?'}</div>
+              <input ref={fileRef} type="file" accept=".csv,.xls,.xlsx" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
+            </div>
+          ) : (
+            <ImportProgressPanel progress={progress} />
+          )}
         </div>
       )}
 

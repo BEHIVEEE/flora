@@ -2,11 +2,20 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import {
+  cacheImportRows,
+  clearCachedImportRows,
+  readCachedImportRows,
+} from '@/lib/import-row-cache';
 
 const JOB_KEY = 'flora-import-job';
 const META_KEY = 'flora-import-job-meta';
-const ROWS_KEY = 'flora-import-rows';
-const BULK_IMPORT_LIMIT = 200;
+const DEFAULT_UPLOAD_CHUNK_SIZE = 100; // smaller batches = reliable uploads for large XLS files
+const PROCESS_BATCH_SIZE = 200;
+
+function getUploadChunkSize(jobLike) {
+  return jobLike?.uploadChunkSize || jobLike?.chunkSize || DEFAULT_UPLOAD_CHUNK_SIZE;
+}
 
 function readMeta() {
   if (typeof window === 'undefined') return null;
@@ -32,7 +41,8 @@ function saveMeta(job) {
       failed: job.failed || 0,
       expectedChunks: job.expectedChunks || 0,
       uploadedChunks: job.uploadedChunks || 0,
-      pendingChunks: job.pendingChunks ?? null,
+      remainingUploadChunks: job.remainingUploadChunks ?? null,
+      pendingProcessingChunks: job.pendingProcessingChunks ?? null,
     })
   );
 }
@@ -41,39 +51,22 @@ function clearStoredJob() {
   if (typeof window === 'undefined') return;
   window.localStorage.removeItem(JOB_KEY);
   window.localStorage.removeItem(META_KEY);
-  try {
-    window.sessionStorage.removeItem(ROWS_KEY);
-  } catch {
-    /* ignore */
-  }
+  clearCachedImportRows();
 }
 
-function cacheRows(rows) {
-  if (typeof window === 'undefined' || !rows?.length) return false;
-  try {
-    window.sessionStorage.setItem(ROWS_KEY, JSON.stringify(rows));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function readCachedRows() {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.sessionStorage.getItem(ROWS_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 export function useImportJob({ onComplete, pollInterval = 3500 } = {}) {
   const [job, setJob] = useState(null);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState(null);
+  const [uploadInterrupted, setUploadInterrupted] = useState(false);
+  const [isUploadingActive, setIsUploadingActive] = useState(false);
   const pollRef = useRef(null);
   const resumeRef = useRef(false);
+  const uploadRef = useRef(false);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -92,7 +85,10 @@ export function useImportJob({ onComplete, pollInterval = 3500 } = {}) {
   const finishJob = useCallback((j) => {
     stopPolling();
     setImporting(false);
+    setIsUploadingActive(false);
+    setUploadInterrupted(false);
     setJob(null);
+    uploadRef.current = false;
     clearStoredJob();
     const outcome = {
       created: j.created || 0,
@@ -110,13 +106,14 @@ export function useImportJob({ onComplete, pollInterval = 3500 } = {}) {
   }, [onComplete, stopPolling]);
 
   const pollStatus = useCallback(async (id) => {
-    if (!id) return null;
+    if (!id || uploadRef.current) return null;
     try {
       const res = await fetch(`/api/admin/import/status?id=${encodeURIComponent(id)}`);
       if (res.status === 404) {
         stopPolling();
         setImporting(false);
         setJob(null);
+        setUploadInterrupted(false);
         clearStoredJob();
         return null;
       }
@@ -141,6 +138,7 @@ export function useImportJob({ onComplete, pollInterval = 3500 } = {}) {
     if (!id) return;
     setImporting(true);
     setResult(null);
+    setUploadInterrupted(false);
     stopPolling();
     pollStatus(id);
     pollRef.current = setInterval(() => pollStatus(id), pollInterval);
@@ -157,57 +155,92 @@ export function useImportJob({ onComplete, pollInterval = 3500 } = {}) {
     return data;
   }, []);
 
-  const uploadChunks = useCallback(async (jobId, rows, fromIndex = 0) => {
-    const totalBatches = Math.ceil(rows.length / BULK_IMPORT_LIMIT);
-    for (let i = fromIndex; i < totalBatches; i++) {
-      const slice = rows.slice(i * BULK_IMPORT_LIMIT, (i + 1) * BULK_IMPORT_LIMIT);
-      await postJson('/api/admin/import/chunk', { jobId, index: i, rows: slice });
-      applyJob({
-        id: jobId,
-        total: rows.length,
-        processed: 0,
-        status: 'uploading',
-        expectedChunks: totalBatches,
-        uploadedChunks: i + 1,
-        pendingChunks: totalBatches - i - 1,
-      });
+  const postChunkWithRetry = useCallback(async (jobId, index, rows) => {
+    let attempt = 0;
+    while (attempt < 4) {
+      try {
+        await postJson('/api/admin/import/chunk', { jobId, index, rows });
+        return;
+      } catch (err) {
+        attempt += 1;
+        if (attempt >= 4) throw err;
+        await sleep(800 * attempt);
+      }
     }
-    await postJson('/api/admin/import/finalize', { jobId });
+  }, [postJson]);
+
+  const uploadChunks = useCallback(async (jobId, rows, fromIndex = 0, chunkSize = DEFAULT_UPLOAD_CHUNK_SIZE) => {
+    const totalBatches = Math.ceil(rows.length / chunkSize);
+    uploadRef.current = true;
+    setIsUploadingActive(true);
+    setUploadInterrupted(false);
+
     try {
-      window.sessionStorage.removeItem(ROWS_KEY);
-    } catch {
-      /* ignore */
+      for (let i = fromIndex; i < totalBatches; i++) {
+        const slice = rows.slice(i * chunkSize, (i + 1) * chunkSize);
+        await postChunkWithRetry(jobId, i, slice);
+        applyJob({
+          id: jobId,
+          total: rows.length,
+          processed: 0,
+          status: 'uploading',
+          expectedChunks: totalBatches,
+          uploadedChunks: i + 1,
+          remainingUploadChunks: totalBatches - i - 1,
+          pendingProcessingChunks: 0,
+        });
+      }
+      await postJson('/api/admin/import/finalize', { jobId });
+      await clearCachedImportRows();
+    } finally {
+      uploadRef.current = false;
+      setIsUploadingActive(false);
     }
-  }, [applyJob, postJson]);
+  }, [applyJob, postChunkWithRetry, postJson]);
 
   const resumeUploadIfNeeded = useCallback(async (activeJob) => {
-    if (!activeJob || activeJob.status !== 'uploading' || resumeRef.current) return;
-    const rows = readCachedRows();
-    if (!rows?.length) return;
+    if (!activeJob || activeJob.status !== 'uploading' || resumeRef.current || uploadRef.current) {
+      return false;
+    }
 
+    const rows = await readCachedImportRows();
     const uploaded = activeJob.uploadedChunks || 0;
-    const expected = activeJob.expectedChunks || Math.ceil(rows.length / BULK_IMPORT_LIMIT);
+    const chunkSize = getUploadChunkSize(activeJob);
+    const expected = activeJob.expectedChunks || (rows ? Math.ceil(rows.length / chunkSize) : 0);
+
+    if (!rows?.length) {
+      if (uploaded < expected) {
+        setUploadInterrupted(true);
+        setImporting(true);
+      }
+      return false;
+    }
+
     if (uploaded >= expected) {
       try {
         await postJson('/api/admin/import/finalize', { jobId: activeJob.id });
         startPolling(activeJob.id);
       } catch (err) {
         console.error('[IMPORT] Finalize on resume failed', err);
+        setUploadInterrupted(true);
       }
-      return;
+      return true;
     }
 
     resumeRef.current = true;
     setImporting(true);
-    toast.info('Resuming interrupted upload…');
+    setUploadInterrupted(false);
+    toast.info(`Resuming upload from batch ${uploaded + 1} of ${expected}…`);
     try {
-      await uploadChunks(activeJob.id, rows, uploaded);
+      await uploadChunks(activeJob.id, rows, uploaded, chunkSize);
       startPolling(activeJob.id);
       toast.success('Upload complete — import processing in background.');
+      return true;
     } catch (err) {
       console.error('[IMPORT] Resume upload failed', err);
       toast.error(err?.message || 'Upload resume failed');
-      setImporting(false);
+      setUploadInterrupted(true);
+      return false;
     } finally {
       resumeRef.current = false;
     }
@@ -241,25 +274,26 @@ export function useImportJob({ onComplete, pollInterval = 3500 } = {}) {
       active = await discoverActiveJob();
       if (active) {
         applyJob(active);
-        saveMeta(active);
         setImporting(true);
       }
     }
 
-    if (active && (active.status === 'queued' || active.status === 'processing')) {
+    if (!active) return;
+
+    if (active.status === 'queued' || active.status === 'processing') {
       startPolling(active.id);
       return;
     }
 
-    if (active?.status === 'uploading') {
-      await resumeUploadIfNeeded(active);
-      if (active.uploadedChunks >= (active.expectedChunks || 0)) {
+    if (active.status === 'uploading') {
+      const resumed = await resumeUploadIfNeeded(active);
+      if (!resumed && (active.uploadedChunks || 0) >= (active.expectedChunks || 0)) {
         startPolling(active.id);
       }
       return;
     }
 
-    if (active && (active.status === 'completed' || active.status === 'failed')) {
+    if (active.status === 'completed' || active.status === 'failed') {
       finishJob(active);
     }
   }, [applyJob, discoverActiveJob, finishJob, pollStatus, resumeUploadIfNeeded, startPolling]);
@@ -267,49 +301,101 @@ export function useImportJob({ onComplete, pollInterval = 3500 } = {}) {
   useEffect(() => {
     bootstrap();
     return () => stopPolling();
-    // Run once on mount to restore any in-progress import from storage/server
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const startImport = useCallback(async (rows) => {
+  const startImport = useCallback(async (rows, existingJobId = null) => {
     if (!rows?.length) throw new Error('No rows to import');
-    cacheRows(rows);
+    await cacheImportRows(rows);
     setImporting(true);
     setResult(null);
+    setUploadInterrupted(false);
 
-    const initData = await postJson('/api/admin/import/init', { total: rows.length });
-    const jobId = initData.jobId;
+    let jobId = existingJobId;
+    let fromIndex = 0;
+    let chunkSize = DEFAULT_UPLOAD_CHUNK_SIZE;
+    let expectedChunks = Math.ceil(rows.length / chunkSize);
+
+    if (existingJobId && job?.status === 'uploading') {
+      fromIndex = job.uploadedChunks || 0;
+      chunkSize = getUploadChunkSize(job);
+      expectedChunks = job.expectedChunks || Math.ceil(rows.length / chunkSize);
+    } else {
+      const initData = await postJson('/api/admin/import/init', {
+        total: rows.length,
+        chunkSize: DEFAULT_UPLOAD_CHUNK_SIZE,
+      });
+      jobId = initData.jobId;
+      chunkSize = initData.uploadChunkSize || DEFAULT_UPLOAD_CHUNK_SIZE;
+      expectedChunks = initData.expectedChunks;
+      fromIndex = 0;
+    }
+
     applyJob({
       id: jobId,
       total: rows.length,
       processed: 0,
       status: 'uploading',
-      expectedChunks: initData.expectedChunks,
-      uploadedChunks: 0,
-      pendingChunks: initData.expectedChunks,
+      expectedChunks,
+      uploadChunkSize: chunkSize,
+      uploadedChunks: fromIndex,
+      remainingUploadChunks: expectedChunks - fromIndex,
+      pendingProcessingChunks: 0,
     });
 
-    await uploadChunks(jobId, rows, 0);
+    await uploadChunks(jobId, rows, fromIndex, chunkSize);
     startPolling(jobId);
     toast.success(`Import started (${rows.length} products). Safe to reload or leave this page.`);
     return jobId;
-  }, [applyJob, postJson, startPolling, uploadChunks]);
+  }, [applyJob, job, postJson, startPolling, uploadChunks]);
+
+  const resumeImport = useCallback(async (rows) => {
+    if (!job?.id) throw new Error('No interrupted import to resume');
+    await cacheImportRows(rows);
+    setUploadInterrupted(false);
+    const chunkSize = getUploadChunkSize(job);
+    await uploadChunks(job.id, rows, job.uploadedChunks || 0, chunkSize);
+    startPolling(job.id);
+    toast.success('Upload resumed — processing will continue in background.');
+  }, [job, startPolling, uploadChunks]);
+
+  const cancelImport = useCallback(async () => {
+    if (!job?.id) return;
+    try {
+      await postJson('/api/admin/import/cancel', { jobId: job.id });
+    } catch (err) {
+      console.error('[IMPORT] Cancel failed', err);
+    }
+    stopPolling();
+    setImporting(false);
+    setJob(null);
+    setUploadInterrupted(false);
+    uploadRef.current = false;
+    clearStoredJob();
+    toast.info('Import cancelled');
+  }, [job, postJson, stopPolling]);
 
   const progress = job
     ? {
         current: job.processed || 0,
         total: job.total || 0,
-        status: job.status || 'processing',
-        pendingChunks: job.pendingChunks ?? null,
-        totalBatches: Math.max(1, Math.ceil((job.total || 0) / BULK_IMPORT_LIMIT)),
+        status: isUploadingActive ? 'uploading' : (job.status || 'processing'),
+        remainingUploadChunks: job.remainingUploadChunks ?? null,
+        pendingProcessingChunks: job.pendingProcessingChunks ?? null,
+        totalBatches: Math.max(
+          1,
+          job.status === 'uploading' || isUploadingActive
+            ? (job.expectedChunks || Math.ceil((job.total || 0) / getUploadChunkSize(job)))
+            : Math.ceil((job.total || 0) / PROCESS_BATCH_SIZE)
+        ),
         currentBatch:
-          job.status === 'uploading'
-            ? job.uploadedChunks || 0
+          job.status === 'uploading' || isUploadingActive
+            ? (job.uploadedChunks || 0)
             : job.status === 'completed'
-              ? Math.max(1, Math.ceil((job.total || 0) / BULK_IMPORT_LIMIT))
+              ? Math.max(1, Math.ceil((job.total || 0) / PROCESS_BATCH_SIZE))
               : Math.min(
-                  Math.max(1, Math.ceil((job.total || 0) / BULK_IMPORT_LIMIT)),
-                  Math.floor((job.processed || 0) / BULK_IMPORT_LIMIT) + 1
+                  Math.max(1, Math.ceil((job.total || 0) / PROCESS_BATCH_SIZE)),
+                  Math.floor((job.processed || 0) / PROCESS_BATCH_SIZE) + 1
                 ),
       }
     : null;
@@ -323,7 +409,11 @@ export function useImportJob({ onComplete, pollInterval = 3500 } = {}) {
     importing,
     result,
     progress,
+    uploadInterrupted,
+    isUploadingActive,
     startImport,
+    resumeImport,
+    cancelImport,
     startPolling,
     resetResult,
     clearStoredJob,
