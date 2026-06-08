@@ -342,6 +342,17 @@ const Import = () => {
     }
   };
 
+  const postJson = async (url, payload) => {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Import failed (${res.status})`);
+    return data;
+  };
+
   const submit = async () => {
     if (!parsed?.rows?.length) return;
     const valid = parsed.rows.filter(r => validate(r).length === 0);
@@ -350,23 +361,35 @@ const Import = () => {
       setImporting(true);
       setResult(null);
       const totalBatches = Math.ceil(valid.length / BULK_IMPORT_LIMIT);
-      setProgress({ current: 0, total: valid.length, currentBatch: 1, totalBatches, status: 'queued', pendingChunks: totalBatches });
-      const res = await fetch('/api/admin/import/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: valid }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d?.error || `Import failed (${res.status})`);
+      setProgress({ current: 0, total: valid.length, currentBatch: 0, totalBatches, status: 'uploading', pendingChunks: totalBatches });
+
+      // Step 1: create import job
+      const initData = await postJson('/api/admin/import/init', { total: valid.length });
+      const jobId = initData.jobId;
+      setJobId(jobId);
+      if (typeof window !== 'undefined') window.localStorage.setItem('flora-import-job', jobId);
+
+      // Step 2: upload in batches of 200 (avoids 413 payload-too-large on big XLS files)
+      for (let i = 0; i < totalBatches; i++) {
+        const slice = valid.slice(i * BULK_IMPORT_LIMIT, (i + 1) * BULK_IMPORT_LIMIT);
+        await postJson('/api/admin/import/chunk', { jobId, index: i, rows: slice });
+        setProgress({
+          current: 0,
+          total: valid.length,
+          currentBatch: i + 1,
+          totalBatches,
+          status: 'uploading',
+          pendingChunks: totalBatches - i - 1,
+        });
       }
-      const data = await res.json();
-      setJobId(data.jobId);
-      if (typeof window !== 'undefined') window.localStorage.setItem('flora-import-job', data.jobId);
-      setProgress({ current: 0, total: valid.length, currentBatch: 1, totalBatches, status: 'processing', pendingChunks: totalBatches });
-      pollStatus(data.jobId);
-      pollRef.current = setInterval(() => pollStatus(data.jobId), 3500);
-      toast.success(`Import started (${valid.length} products). You can navigate away, it will continue in background.`);
+
+      // Step 3: start background processing
+      await postJson('/api/admin/import/finalize', { jobId });
+
+      setProgress({ current: 0, total: valid.length, currentBatch: totalBatches, totalBatches, status: 'processing', pendingChunks: totalBatches });
+      pollStatus(jobId);
+      pollRef.current = setInterval(() => pollStatus(jobId), 3500);
+      toast.success(`Import started (${valid.length} products). You can navigate away — it continues in the background.`);
     } catch (err) {
       console.error('Import start failed', err);
       setImporting(false);
@@ -426,13 +449,21 @@ const Import = () => {
               {progress && (
                 <div className="mt-3 space-y-2">
                   <div className="flex justify-between text-xs text-slate-600">
-                    <span>Status: {progress.status || 'processing'}</span>
-                    <span>{progress.current} / {progress.total} products</span>
+                    <span>Status: {progress.status === 'uploading' ? 'Uploading file…' : (progress.status || 'processing')}</span>
+                    <span>
+                      {progress.status === 'uploading'
+                        ? `Batch ${progress.currentBatch} / ${progress.totalBatches}`
+                        : `${progress.current} / ${progress.total} products`}
+                    </span>
                   </div>
                   <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-teal-600 transition-all duration-300" 
-                      style={{ width: `${progress.total ? Math.min(100, (progress.current / progress.total) * 100) : 0}%` }}
+                      style={{
+                        width: progress.status === 'uploading'
+                          ? `${progress.totalBatches ? Math.min(100, (progress.currentBatch / progress.totalBatches) * 100) : 0}%`
+                          : `${progress.total ? Math.min(100, (progress.current / progress.total) * 100) : 0}%`,
+                      }}
                     />
                   </div>
                   {typeof progress.pendingChunks === 'number' && (

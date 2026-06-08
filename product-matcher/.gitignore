@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+data/index/
+data/cache/
+data/output/
+logs/
+*.npz
+.env
+data/test_dataset_a.csv

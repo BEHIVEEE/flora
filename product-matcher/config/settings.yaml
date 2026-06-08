@@ -1,0 +1,78 @@
+# Product matcher configuration
+
+input:
+  # Dataset A (your website) column mapping
+  dataset_a:
+    id_column: id          # fallback: product_id, Product ID
+    name_column: name      # fallback: product_name, Product Name
+    brand_column: brand    # optional; extracted from name if missing
+
+  # Dataset B (DataRequisite) column mapping
+  dataset_b:
+    id_column: Product ID
+    name_column: Product Name
+    image_column: Image_Urls
+    brand_column: Marketer   # optional fallback for brand hints
+
+processing:
+  batch_size: 5000
+  chunk_read_size: 50000
+  max_candidates_per_product: 50
+  enable_semantic_stage: true
+  semantic_model: all-MiniLM-L6-v2
+  embedding_batch_size: 256
+  min_fuzzy_score: 75          # minimum RapidFuzz score to proceed to semantic
+  min_semantic_score: 0.72     # minimum cosine similarity for semantic stage
+
+blocking:
+  # Composite block key fields (reduces candidate set dramatically)
+  use_brand: true
+  use_form: true
+  use_strength: true
+  use_pack_prefix: true        # first 2 chars of normalized name
+  fallback_block: name_prefix_3  # when brand unknown, block by name prefix
+
+scoring:
+  weights:
+    exact_match: 1.0
+    brand_match: 0.25
+    strength_match: 0.20
+    quantity_match: 0.15
+    pack_match: 0.10
+    form_match: 0.10
+    fuzzy_score: 0.15
+    semantic_score: 0.05
+  thresholds:
+    auto_accept: 98
+    manual_review: 90
+    reject_below: 90
+
+output:
+  columns:
+    - my_product_id
+    - my_product_name
+    - matched_product_id
+    - matched_product_name
+    - image_url_1
+    - image_url_2
+    - image_url_3
+    - confidence_score
+    - match_stage
+    - review_status
+
+logging:
+  level: INFO
+  file: logs/matcher.log
+
+database:
+  enabled: false
+  host: localhost
+  port: 5432
+  database: product_matcher
+  user: matcher
+  password: ""
+
+paths:
+  index_dir: data/index
+  output_dir: data/output
+  cache_dir: data/cache

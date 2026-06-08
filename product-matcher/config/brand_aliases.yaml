@@ -1,0 +1,90 @@
+# Brand abbreviation → canonical brand name (lowercase).
+# Add your own aliases here without changing code.
+#
+# Keys are matched as whole tokens at the start of product names
+# or as standalone brand fields.
+
+aliases:
+  # Skincare & wellness
+  him: himalaya
+  min: minimalist
+  ctp: cetaphil
+  ctph: cetaphil
+  cer: cerave
+  cerave: cerave
+  dot: dot and key
+  dnk: dot and key
+  mama: mamaearth
+  me: mamaearth
+  plm: plum
+  plum: plum
+  mc: mcaffeine
+  mcf: mcaffeine
+  wow: wow skin science
+  bbl: bath and body works
+  # Pharma abbreviations
+  gsk: gsk
+  cipl: cipla
+  cipla: cipla
+  sun: sun pharma
+  sp: sun pharma
+  alk: alkem
+  alkem: alkem
+  lup: lupin
+  lupin: lupin
+  zyd: zydus
+  zydus: zydus
+  msd: msd
+  pfz: pfizer
+  pfizer: pfizer
+  nov: novartis
+  novartis: novartis
+  san: sanofi
+  sanofi: sanofi
+  abb: abbott
+  abbott: abbott
+  emc: emcure
+  emcure: emcure
+  ipc: ipca
+  ipca: ipca
+  auro: aurobindo
+  aurobindo: aurobindo
+  # OTC & consumer
+  dab: dabur
+  dabur: dabur
+  pat: patanjali
+  patanjali: patanjali
+  zan: zandu
+  zandu: zandu
+  himal: himalaya
+  himalaya: himalaya
+  # Pet care
+  ped: pedigree
+  pedigree: pedigree
+  whis: whiskas
+  whiskas: whiskas
+  rc: royal canin
+  royal canin: royal canin
+  # Surgical & devices
+  tyn: tynor
+  tynor: tynor
+  vis: vissco
+  vissco: vissco
+  dr: dr morepen
+  morepen: dr morepen
+
+# Known multi-word brands (checked before token splitting)
+multi_word_brands:
+  - dot and key
+  - wow skin science
+  - bath and body works
+  - dr morepen
+  - sun pharma
+  - royal canin
+  - mama earth
+  - mamaearth
+  - mcaffeine
+  - the ordinary
+  - la roche posay
+  - johnson and johnson
+  - procter and gamble

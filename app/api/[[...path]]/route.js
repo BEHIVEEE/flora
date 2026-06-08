@@ -1622,6 +1622,100 @@ export async function POST(req, { params }) {
       return json({ product });
     }
 
+    // Chunked import: init → chunk (repeat) → finalize (avoids 413 on large XLS/CSV)
+    if (path === 'admin/import/init') {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const total = Number(body.total) || 0;
+      if (!total) return json({ ok: false, error: 'total required' }, 400);
+      if (total > 50000) return json({ ok: false, error: 'Too many rows in one import (max 50k)' }, 400);
+
+      const now = new Date().toISOString();
+      const jobId = 'imp-' + uuidv4().slice(0, 8);
+      const expectedChunks = Math.ceil(total / BULK_IMPORT_LIMIT);
+
+      await db.collection('import_jobs').insertOne({
+        id: jobId,
+        status: 'uploading',
+        total,
+        processed: 0,
+        created: 0,
+        updated: 0,
+        failed: 0,
+        errors: [],
+        createdAt: now,
+        updatedAt: now,
+        startedAt: null,
+        completedAt: null,
+        chunkSize: BULK_IMPORT_LIMIT,
+        pendingChunks: expectedChunks,
+        expectedChunks,
+        uploadedChunks: 0,
+        initiatedBy: admin.user?.id || 'admin',
+        initiatedEmail: admin.user?.email || '',
+      });
+      return json({ ok: true, jobId, total, expectedChunks });
+    }
+
+    if (path === 'admin/import/chunk') {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const jobId = body.jobId;
+      const index = Number(body.index);
+      const chunkRows = Array.isArray(body.rows) ? body.rows : [];
+      if (!jobId || Number.isNaN(index)) return json({ ok: false, error: 'jobId and index required' }, 400);
+      if (!chunkRows.length) return json({ ok: false, error: 'rows array required' }, 400);
+      if (chunkRows.length > BULK_IMPORT_LIMIT) {
+        return json({ ok: false, error: `Max ${BULK_IMPORT_LIMIT} rows per chunk` }, 400);
+      }
+      const chunkBytes = Buffer.byteLength(JSON.stringify(chunkRows), 'utf8');
+      if (chunkBytes > 4 * 1024 * 1024) {
+        return json({ ok: false, error: 'Chunk too large (>4MB). Try a file with shorter descriptions.' }, 413);
+      }
+
+      const job = await db.collection('import_jobs').findOne({ id: jobId });
+      if (!job) return json({ ok: false, error: 'Job not found' }, 404);
+      if (job.status !== 'uploading') return json({ ok: false, error: 'Job is not accepting uploads' }, 400);
+
+      const now = new Date().toISOString();
+      await db.collection('import_job_chunks').updateOne(
+        { jobId, index },
+        { $set: { jobId, index, rows: chunkRows, createdAt: now } },
+        { upsert: true }
+      );
+      const uploadedChunks = await db.collection('import_job_chunks').countDocuments({ jobId });
+      await db.collection('import_jobs').updateOne(
+        { id: jobId },
+        { $set: { uploadedChunks, updatedAt: now } }
+      );
+      return json({ ok: true, jobId, index, uploadedChunks, expectedChunks: job.expectedChunks || 0 });
+    }
+
+    if (path === 'admin/import/finalize') {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const jobId = body.jobId;
+      if (!jobId) return json({ ok: false, error: 'jobId required' }, 400);
+
+      const job = await db.collection('import_jobs').findOne({ id: jobId });
+      if (!job) return json({ ok: false, error: 'Job not found' }, 404);
+      if (job.status !== 'uploading') return json({ ok: false, error: 'Job already finalized' }, 400);
+
+      const uploadedChunks = await db.collection('import_job_chunks').countDocuments({ jobId });
+      const expected = job.expectedChunks || 0;
+      if (uploadedChunks < expected) {
+        return json({ ok: false, error: `Incomplete upload: ${uploadedChunks}/${expected} batches received` }, 400);
+      }
+
+      await db.collection('import_jobs').updateOne(
+        { id: jobId },
+        { $set: { status: 'queued', pendingChunks: uploadedChunks, updatedAt: new Date().toISOString() } }
+      );
+      startImportProcessor();
+      return json({ ok: true, jobId, total: job.total });
+    }
+
+    // Legacy single-request import (small files only, ≤12MB)
     if (path === 'admin/import/start') {
       const admin = await requireAdmin(req, db);
       if (admin.error) return admin.error;
@@ -1630,7 +1724,7 @@ export async function POST(req, { params }) {
       if (rows.length > 50000) return json({ ok: false, error: 'Too many rows in one import (max 50k)' }, 400);
       const estimateBytes = Buffer.byteLength(JSON.stringify(rows), 'utf8');
       if (estimateBytes > 12 * 1024 * 1024) {
-        return json({ ok: false, error: 'Import payload too large (>12MB). Please split into smaller files.' }, 413);
+        return json({ ok: false, error: 'Import payload too large (>12MB). The app will auto-chunk large files — please refresh and try again.' }, 413);
       }
 
       const now = new Date().toISOString();
@@ -1657,6 +1751,8 @@ export async function POST(req, { params }) {
         completedAt: null,
         chunkSize,
         pendingChunks: chunks.length,
+        expectedChunks: chunks.length,
+        uploadedChunks: chunks.length,
         initiatedBy: admin.user?.id || 'admin',
         initiatedEmail: admin.user?.email || '',
       };
