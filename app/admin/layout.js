@@ -1,6 +1,8 @@
 'use client';
 import { useAuth } from '@/components/AuthProvider';
 import Sidebar from '@/components/admin/Sidebar';
+import ImportJobProvider from '@/components/admin/ImportJobProvider';
+import ImportJobBanner from '@/components/admin/ImportJobBanner';
 
 const AdminLayout = ({ children }) => {
   const { user, loading } = useAuth() || { user: null, loading: true };
@@ -18,12 +20,17 @@ const AdminLayout = ({ children }) => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Sidebar />
-      <div className="lg:pl-64">
-        <div className="max-w-[1400px] mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">{children}</div>
+    <ImportJobProvider>
+      <div className="min-h-screen bg-slate-50">
+        <Sidebar />
+        <div className="lg:pl-64">
+          <div className="max-w-[1400px] mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8">
+            <ImportJobBanner />
+            {children}
+          </div>
+        </div>
       </div>
-    </div>
+    </ImportJobProvider>
   );
 };
 

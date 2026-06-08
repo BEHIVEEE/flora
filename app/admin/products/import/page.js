@@ -1,9 +1,11 @@
 'use client';
 import { useRef, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, Upload, FileText, Check, X, Download, Loader2 } from 'lucide-react';
+import { ChevronLeft, Upload, Check, X, Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { useImportJobContext } from '@/components/admin/ImportJobProvider';
+import ImportProgressPanel from '@/components/admin/ImportProgressPanel';
 
 const BULK_IMPORT_LIMIT = 200;
 const BATCH_SIZE = BULK_IMPORT_LIMIT;
@@ -195,12 +197,9 @@ function canonicalizeStandardRows(raw) {
 const Import = () => {
   const fileRef = useRef(null);
   const [parsed, setParsed] = useState(null); // {headers, rows, format}
-  const [importing, setImporting] = useState(false);
-  const [result, setResult] = useState(null);
   const [categories, setCategories] = useState([]);
-  const [progress, setProgress] = useState(null); // { current, total, currentBatch }
-  const [jobId, setJobId] = useState(null);
-  const pollRef = useRef(null);
+  const { importing, result, progress, startImport, resetResult } = useImportJobContext();
+  const hasActiveJob = importing && !result;
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.json()).then(d => setCategories(d.categories || []));
@@ -285,134 +284,18 @@ const Import = () => {
     URL.revokeObjectURL(url);
   };
 
-  const stopPolling = () => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  };
-
-  const pollStatus = async (id) => {
-    if (!id) return;
-    try {
-      const res = await fetch(`/api/admin/import/status?id=${id}`);
-      if (res.status === 404) {
-        stopPolling();
-        setImporting(false);
-        setJobId(null);
-        if (typeof window !== 'undefined') window.localStorage.removeItem('flora-import-job');
-        return;
-      }
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (data?.job) {
-        const j = data.job;
-        const total = j.total || 0;
-        const processed = j.processed || 0;
-        const totalBatches = Math.max(1, Math.ceil(total / BULK_IMPORT_LIMIT));
-        const currentBatch = j.status === 'completed'
-          ? totalBatches
-          : Math.min(totalBatches, Math.floor(processed / BULK_IMPORT_LIMIT) + 1);
-        setProgress({
-          current: processed,
-          total,
-          currentBatch,
-          totalBatches,
-          status: j.status,
-          pendingChunks: j.pendingChunks ?? null,
-        });
-        if (j.status === 'completed' || j.status === 'failed') {
-          stopPolling();
-          setImporting(false);
-          setResult({
-            created: j.created || 0,
-            updated: j.updated || 0,
-            failed: j.failed || 0,
-            errors: j.errors || [],
-            status: j.status,
-            errorMessage: j.errorMessage,
-          });
-          setJobId(null);
-          if (typeof window !== 'undefined') window.localStorage.removeItem('flora-import-job');
-          toast[j.status === 'completed' ? 'success' : 'error'](j.status === 'completed' ? 'Import completed' : 'Import failed');
-        }
-      }
-    } catch (err) {
-      console.error('Poll failed', err);
-    }
-  };
-
-  const postJson = async (url, payload) => {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error || `Import failed (${res.status})`);
-    return data;
-  };
-
   const submit = async () => {
     if (!parsed?.rows?.length) return;
     const valid = parsed.rows.filter(r => validate(r).length === 0);
     if (valid.length === 0) { toast.error('No valid rows to import'); return; }
     try {
-      setImporting(true);
-      setResult(null);
-      const totalBatches = Math.ceil(valid.length / BULK_IMPORT_LIMIT);
-      setProgress({ current: 0, total: valid.length, currentBatch: 0, totalBatches, status: 'uploading', pendingChunks: totalBatches });
-
-      // Step 1: create import job
-      const initData = await postJson('/api/admin/import/init', { total: valid.length });
-      const jobId = initData.jobId;
-      setJobId(jobId);
-      if (typeof window !== 'undefined') window.localStorage.setItem('flora-import-job', jobId);
-
-      // Step 2: upload in batches of 200 (avoids 413 payload-too-large on big XLS files)
-      for (let i = 0; i < totalBatches; i++) {
-        const slice = valid.slice(i * BULK_IMPORT_LIMIT, (i + 1) * BULK_IMPORT_LIMIT);
-        await postJson('/api/admin/import/chunk', { jobId, index: i, rows: slice });
-        setProgress({
-          current: 0,
-          total: valid.length,
-          currentBatch: i + 1,
-          totalBatches,
-          status: 'uploading',
-          pendingChunks: totalBatches - i - 1,
-        });
-      }
-
-      // Step 3: start background processing
-      await postJson('/api/admin/import/finalize', { jobId });
-
-      setProgress({ current: 0, total: valid.length, currentBatch: totalBatches, totalBatches, status: 'processing', pendingChunks: totalBatches });
-      pollStatus(jobId);
-      pollRef.current = setInterval(() => pollStatus(jobId), 3500);
-      toast.success(`Import started (${valid.length} products). You can navigate away — it continues in the background.`);
+      await startImport(valid);
+      setParsed(null);
     } catch (err) {
       console.error('Import start failed', err);
-      setImporting(false);
-      setJobId(null);
-      if (typeof window !== 'undefined') window.localStorage.removeItem('flora-import-job');
       toast.error(err?.message || 'Failed to start import');
     }
   };
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const existing = window.localStorage.getItem('flora-import-job');
-      if (existing) {
-        setJobId(existing);
-        setImporting(true);
-        setResult(null);
-        setProgress(prev => prev || { current: 0, total: 0, currentBatch: 1, totalBatches: 1, status: 'processing', pendingChunks: null });
-        pollStatus(existing);
-        pollRef.current = setInterval(() => pollStatus(existing), 3500);
-      }
-    }
-    return () => stopPolling();
-  }, []);
 
   return (
     <div className="space-y-5">
@@ -425,7 +308,24 @@ const Import = () => {
         <Button variant="outline" onClick={downloadSample} className="rounded-full"><Download className="w-4 h-4 mr-1" /> Download Sample CSV</Button>
       </div>
 
-      {!parsed && !result && (
+      {hasActiveJob && !result && (
+        <div className="bg-white border border-teal-200 rounded-2xl p-6 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+            <div>
+              <div className="font-bold text-slate-900 text-lg">Import in progress</div>
+              <div className="text-sm text-slate-500">
+                Running in the background on the server. Reloading this page is safe.
+              </div>
+            </div>
+          </div>
+          <ImportProgressPanel progress={progress} />
+        </div>
+      )}
+
+      {!parsed && !result && !hasActiveJob && (
         <div onClick={() => fileRef.current?.click()} className="bg-white border-2 border-dashed border-teal-300 hover:bg-teal-50/40 hover:border-teal-400 rounded-2xl p-12 text-center cursor-pointer transition-colors">
           <div className="w-16 h-16 mx-auto bg-teal-100 text-teal-700 rounded-2xl flex items-center justify-center mb-3"><Upload className="w-7 h-7" /></div>
           <div className="font-bold text-slate-900 text-lg">Click to upload a CSV or Excel</div>
@@ -435,7 +335,7 @@ const Import = () => {
         </div>
       )}
 
-      {parsed && !result && (
+      {parsed && !result && !hasActiveJob && (
         <div className="space-y-3">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between flex-wrap gap-3">
             <div>
@@ -446,31 +346,7 @@ const Import = () => {
                   <Check className="w-3 h-3" /> Distributor invoice format auto-detected · Mapped to Allopathic Medicines
                 </div>
               )}
-              {progress && (
-                <div className="mt-3 space-y-2">
-                  <div className="flex justify-between text-xs text-slate-600">
-                    <span>Status: {progress.status === 'uploading' ? 'Uploading file…' : (progress.status || 'processing')}</span>
-                    <span>
-                      {progress.status === 'uploading'
-                        ? `Batch ${progress.currentBatch} / ${progress.totalBatches}`
-                        : `${progress.current} / ${progress.total} products`}
-                    </span>
-                  </div>
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-teal-600 transition-all duration-300" 
-                      style={{
-                        width: progress.status === 'uploading'
-                          ? `${progress.totalBatches ? Math.min(100, (progress.currentBatch / progress.totalBatches) * 100) : 0}%`
-                          : `${progress.total ? Math.min(100, (progress.current / progress.total) * 100) : 0}%`,
-                      }}
-                    />
-                  </div>
-                  {typeof progress.pendingChunks === 'number' && (
-                    <div className="text-[11px] text-slate-500">Remaining batches: {progress.pendingChunks}</div>
-                  )}
-                </div>
-              )}
+              {progress && <ImportProgressPanel progress={progress} />}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => { setParsed(null); }} className="rounded-full">Reset</Button>
@@ -537,7 +413,7 @@ const Import = () => {
           {result.errors?.length > 0 && <div className="mt-3 text-xs text-rose-700 bg-rose-50 rounded-xl p-3 max-w-md mx-auto text-left"><div className="font-bold mb-1">Errors</div><ul className="list-disc list-inside space-y-0.5">{result.errors.slice(0, 5).map((e, i) => <li key={i}>{e}</li>)}</ul></div>}
           <div className="mt-6 flex gap-2 justify-center">
             <Link href="/admin/products"><Button className="bg-teal-600 hover:bg-teal-700 rounded-full font-semibold">Back to Products</Button></Link>
-            <Button variant="outline" onClick={() => { setParsed(null); setResult(null); }} className="rounded-full">Import Another</Button>
+            <Button variant="outline" onClick={() => { setParsed(null); resetResult(); }} className="rounded-full">Import Another</Button>
           </div>
         </div>
       )}

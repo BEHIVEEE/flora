@@ -875,6 +875,18 @@ export async function GET(req, { params }) {
       return json({ job: { ...job, pendingChunks } }, 200, 'none');
     }
 
+    if (path === 'admin/import/active') {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const job = await db.collection('import_jobs').findOne(
+        { status: { $in: ['uploading', 'queued', 'processing'] } },
+        { sort: { createdAt: -1 }, projection: { _id: 0 } }
+      );
+      if (!job) return json({ job: null }, 200, 'none');
+      const pendingChunks = await db.collection('import_job_chunks').countDocuments({ jobId: job.id });
+      return json({ job: { ...job, pendingChunks } }, 200, 'none');
+    }
+
     if (path === 'admin/stats') {
       const admin = await requireAdmin(req, db);
       if (admin.error) return admin.error;
