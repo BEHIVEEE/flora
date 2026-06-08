@@ -1,40 +1,65 @@
-import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongo';
 import { finalizeOrder } from '@/lib/orders';
-import crypto from 'crypto';
+import { payuRedirect, verifyPayuResponseHash } from '@/lib/payu';
 
 export async function POST(req) {
   try {
     const formData = await req.formData();
-    const status = formData.get('status');
-    const txnid = formData.get('txnid');
-    const amount = formData.get('amount');
-    const productinfo = formData.get('productinfo');
-    const firstname = formData.get('firstname');
-    const email = formData.get('email');
-    const phone = formData.get('phone');
-    const hash = formData.get('hash');
-    const udf1 = formData.get('udf1') || '';
-    const udf2 = formData.get('udf2') || '';
-    const udf3 = formData.get('udf3') || '';
-    const udf4 = formData.get('udf4') || '';
-    const udf5 = formData.get('udf5') || '';
+    const status = String(formData.get('status') || '');
+    const txnid = String(formData.get('txnid') || '');
+    const amount = String(formData.get('amount') || '');
+    const productinfo = String(formData.get('productinfo') || '');
+    const firstname = String(formData.get('firstname') || '');
+    const email = String(formData.get('email') || '');
+    const phone = String(formData.get('phone') || '');
+    const hash = String(formData.get('hash') || '');
+    const udf1 = String(formData.get('udf1') || '');
+    const udf2 = String(formData.get('udf2') || '');
+    const udf3 = String(formData.get('udf3') || '');
+    const udf4 = String(formData.get('udf4') || '');
+    const udf5 = String(formData.get('udf5') || '');
+    const additionalCharges = String(formData.get('additionalCharges') || '');
 
+    // Log everything PayU sent back for debugging
+    console.log('[PayU success raw]', {
+      status, txnid, amount, productinfo, firstname, email,
+      hash, additionalCharges,
+      udf1: udf1?.slice(0, 120),
+      udf2, udf3, udf4, udf5,
+      allKeys: [...formData.keys()],
+    });
+
+    const merchantKey = process.env.PAYU_MERCHANT_KEY;
     const merchantSalt = process.env.PAYU_MERCHANT_SALT;
-    if (!merchantSalt) {
-      return NextResponse.json({ error: 'PayU not configured' }, { status: 503 });
+    if (!merchantSalt || !merchantKey) {
+      return payuRedirect(req, '/checkout?error=server_error');
     }
 
-    // Verify hash (reverse hash formula)
-    const hashInput = `${merchantSalt}|${status}|||||||${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${process.env.PAYU_MERCHANT_KEY}`;
-    const calculatedHash = crypto.createHash('sha512').update(hashInput).digest('hex');
+    const hashValid = verifyPayuResponseHash({
+      salt: merchantSalt,
+      merchantKey,
+      status,
+      udf1,
+      udf2,
+      udf3,
+      udf4,
+      udf5,
+      email,
+      firstname,
+      productinfo,
+      amount,
+      txnid,
+      additionalCharges,
+      hash,
+    });
 
-    if (calculatedHash !== hash) {
-      return NextResponse.redirect(new URL('/checkout?error=verification_failed', req.url));
+    if (!hashValid) {
+      console.error('PayU hash mismatch', { txnid, status, amount });
+      return payuRedirect(req, '/checkout?error=verification_failed');
     }
 
     if (status !== 'success') {
-      return NextResponse.redirect(new URL('/checkout?error=payment_failed', req.url));
+      return payuRedirect(req, '/checkout?error=payment_failed');
     }
 
     const db = await getDb();
@@ -74,16 +99,16 @@ export async function POST(req) {
 
     if (result?.error === 'insufficient_stock') {
       const shortageParam = encodeURIComponent(JSON.stringify(result.shortages || []));
-      return NextResponse.redirect(new URL(`/checkout?error=insufficient_stock&shortages=${shortageParam}`, req.url));
+      return payuRedirect(req, `/checkout?error=insufficient_stock&shortages=${shortageParam}`);
     }
     if (result?.error) {
-      return NextResponse.redirect(new URL(`/checkout?error=${encodeURIComponent(result.error)}`, req.url));
+      return payuRedirect(req, `/checkout?error=${encodeURIComponent(result.error)}`);
     }
     const order = result;
 
-    return NextResponse.redirect(new URL(`/order-confirmed?id=${order.id}`, req.url));
+    return payuRedirect(req, `/order-confirmed?id=${order.id}`);
   } catch (error) {
     console.error('PayU success error:', error);
-    return NextResponse.redirect(new URL('/checkout?error=server_error', req.url));
+    return payuRedirect(req, '/checkout?error=server_error');
   }
 }
