@@ -35,6 +35,31 @@ const CheckoutPage = () => {
   useEffect(() => {
     setRzpLoaded(true);
   }, []);
+
+  // Show payment errors returned from PayU callback (GET redirect)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get('error');
+    if (!error) return;
+
+    const messages = {
+      verification_failed: 'Payment could not be verified. If money was deducted, contact support with your UPI/transaction reference.',
+      payment_failed: 'Payment failed or was cancelled. Please try again.',
+      server_error: 'Something went wrong after payment. Please contact support if you were charged.',
+    };
+    toast.error(messages[error] || decodeURIComponent(error.replace(/\+/g, ' ')));
+
+    if (error === 'insufficient_stock') {
+      try {
+        const shortages = JSON.parse(params.get('shortages') || '[]');
+        const names = shortages.map(s => `${s.name} (avail: ${s.available})`).join(', ');
+        if (names) toast.error('Not enough stock', { description: names });
+      } catch { /* ignore */ }
+    }
+
+    window.history.replaceState({}, '', '/checkout');
+  }, []);
   const homeDeliveryFee = (subtotal || 0) >= freeDeliveryAbove ? 0 : deliveryCharge;
   const pickupCharge = Number(pickupFee) || 0;
   const deliveryFee = deliveryMethod === 'home' ? homeDeliveryFee : pickupCharge;
@@ -113,6 +138,8 @@ const CheckoutPage = () => {
     try {
       const orderId = `FLC-${Date.now()}`;
       const productInfo = `Order ${items.length} item${items.length > 1 ? 's' : ''}`;
+      // Compute udf1 once so the hash generation and form submission use the exact same string
+      const udf1 = JSON.stringify(orderPayload());
       const res = await fetch('/api/payu/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -122,7 +149,7 @@ const CheckoutPage = () => {
           email: address.email || 'customer@florachemist.online',
           phone: address.phone,
           name: address.name,
-          udf1: JSON.stringify(orderPayload()),
+          udf1,
           productInfo,
         }),
       });
@@ -156,7 +183,7 @@ const CheckoutPage = () => {
         surl: `${window.location.origin}/api/payu/success`,
         furl: `${window.location.origin}/api/payu/failure`,
         service_provider: 'payu_paisa',
-        udf1: JSON.stringify(orderPayload()),
+        udf1,
         udf2: '', udf3: '', udf4: '', udf5: '', udf6: '', udf7: '', udf8: '', udf9: '', udf10: '',
       };
 
