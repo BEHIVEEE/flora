@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { payuRedirect } from '@/lib/payu';
 
 export async function POST(req) {
   try {
@@ -8,9 +8,9 @@ export async function POST(req) {
 
     console.log('PayU payment failed:', { txnid, error });
 
-    return NextResponse.redirect(new URL(`/checkout?error=${encodeURIComponent(error)}`, req.url));
+    return payuRedirect(req, `/checkout?error=${encodeURIComponent(error)}`);
   } catch (error) {
     console.error('PayU failure handler error:', error);
-    return NextResponse.redirect(new URL('/checkout?error=server_error', req.url));
+    return payuRedirect(req, '/checkout?error=server_error');
   }
 }

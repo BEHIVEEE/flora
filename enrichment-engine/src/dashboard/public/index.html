@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pharmacy Enrichment Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+    header { background: #1e293b; padding: 1rem 2rem; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 1.3rem; font-weight: 700; color: #38bdf8; }
+    header .status { font-size: 0.8rem; color: #94a3b8; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; margin-right: 6px; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem 2rem; }
+    .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 1.25rem; }
+    .stat-card { text-align: center; }
+    .stat-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 0.5rem; }
+    .stat-value { font-size: 2rem; font-weight: 800; color: #f1f5f9; }
+    .stat-sub { font-size: 0.8rem; color: #94a3b8; margin-top: 0.25rem; }
+    .accent-green { color: #22c55e; }
+    .accent-yellow { color: #eab308; }
+    .accent-red { color: #ef4444; }
+    .accent-blue { color: #38bdf8; }
+    .card h3 { font-size: 0.9rem; font-weight: 600; color: #94a3b8; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .progress-bar { background: #0f172a; border-radius: 9999px; height: 10px; overflow: hidden; margin: 0.4rem 0; }
+    .progress-fill { height: 100%; border-radius: 9999px; transition: width 0.5s; }
+    .progress-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.6rem; }
+    .progress-row .label { color: #94a3b8; flex: 1; }
+    .progress-row .val { color: #e2e8f0; font-weight: 600; width: 60px; text-align: right; }
+    canvas { max-height: 220px; }
+    .queue-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .queue-table th { color: #64748b; text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #334155; }
+    .queue-table td { padding: 0.5rem 0.6rem; border-bottom: 1px solid #1e293b; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; }
+    .badge-green { background: #14532d; color: #4ade80; }
+    .badge-yellow { background: #713f12; color: #fbbf24; }
+    .badge-red { background: #7f1d1d; color: #f87171; }
+    .badge-blue { background: #0c4a6e; color: #38bdf8; }
+    .bull-link { display: inline-block; margin-top: 0.75rem; font-size: 0.8rem; color: #38bdf8; text-decoration: none; }
+    .bull-link:hover { text-decoration: underline; }
+    footer { text-align: center; padding: 1.5rem; color: #475569; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>⚗️ Pharmacy Enrichment Engine</h1>
+    <div class="status"><span class="status-dot"></span><span id="lastUpdated">Connecting…</span></div>
+  </header>
+
+  <div class="container">
+    <!-- KPI Cards -->
+    <div class="grid-4" id="kpiGrid">
+      <div class="card stat-card"><div class="stat-label">Total Products</div><div class="stat-value accent-blue" id="kpi-total">—</div></div>
+      <div class="card stat-card"><div class="stat-label">Auto Matched</div><div class="stat-value accent-green" id="kpi-matched">—</div></div>
+      <div class="card stat-card"><div class="stat-label">Review Required</div><div class="stat-value accent-yellow" id="kpi-review">—</div></div>
+      <div class="card stat-card"><div class="stat-label">Unmatched</div><div class="stat-value accent-red" id="kpi-unmatched">—</div></div>
+      <div class="card stat-card"><div class="stat-label">Enriched</div><div class="stat-value accent-green" id="kpi-enriched">—</div><div class="stat-sub" id="kpi-enriched-pct"></div></div>
+      <div class="card stat-card"><div class="stat-label">Images Uploaded</div><div class="stat-value accent-blue" id="kpi-uploaded">—</div><div class="stat-sub" id="kpi-uploaded-pct"></div></div>
+      <div class="card stat-card"><div class="stat-label">Downloads Failed</div><div class="stat-value accent-red" id="kpi-img-failed">—</div></div>
+      <div class="card stat-card"><div class="stat-label">Match Rate</div><div class="stat-value" id="kpi-match-rate">—</div></div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Matching breakdown chart -->
+      <div class="card">
+        <h3>Matching Breakdown</h3>
+        <canvas id="matchChart"></canvas>
+      </div>
+      <!-- Image pipeline chart -->
+      <div class="card">
+        <h3>Image Pipeline</h3>
+        <canvas id="imageChart"></canvas>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Match progress bars -->
+      <div class="card">
+        <h3>Match Progress</h3>
+        <div id="matchProgress"></div>
+      </div>
+      <!-- Queue status -->
+      <div class="card">
+        <h3>Queue Status</h3>
+        <table class="queue-table">
+          <thead><tr><th>Queue</th><th>Waiting</th><th>Active</th><th>Completed</th><th>Failed</th></tr></thead>
+          <tbody id="queueTable"></tbody>
+        </table>
+        <a class="bull-link" href="/queues" target="_blank">→ Open Bull Board UI</a>
+      </div>
+    </div>
+  </div>
+  <footer>Pharmacy Enrichment Engine · Real-time dashboard</footer>
+
+  <script>
+    const socket = io();
+    let matchChart, imageChart;
+
+    function initCharts() {
+      const chartDefaults = {
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
+      };
+
+      matchChart = new Chart(document.getElementById('matchChart'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Auto Matched', 'Review', 'Unmatched'],
+          datasets: [{ data: [0, 0, 0], backgroundColor: ['#22c55e', '#eab308', '#ef4444'], borderWidth: 0 }],
+        },
+        options: { ...chartDefaults, cutout: '65%' },
+      });
+
+      imageChart = new Chart(document.getElementById('imageChart'), {
+        type: 'bar',
+        data: {
+          labels: ['Pending', 'Downloaded', 'Uploaded', 'Failed'],
+          datasets: [{ data: [0, 0, 0, 0], backgroundColor: ['#64748b', '#38bdf8', '#22c55e', '#ef4444'], borderRadius: 6 }],
+        },
+        options: {
+          ...chartDefaults,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#64748b' }, grid: { display: false } },
+            y: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } },
+          },
+        },
+      });
+    }
+
+    function updateStats(data) {
+      const p = data.products, m = data.matching, img = data.images, q = data.queues;
+
+      // KPIs
+      document.getElementById('kpi-total').textContent      = fmt(p.total);
+      document.getElementById('kpi-matched').textContent    = fmt(m.auto_matched);
+      document.getElementById('kpi-review').textContent     = fmt(m.review_required);
+      document.getElementById('kpi-unmatched').textContent  = fmt(m.rejected);
+      document.getElementById('kpi-enriched').textContent   = fmt(p.enriched);
+      document.getElementById('kpi-enriched-pct').textContent = p.enrichedPct + '% complete';
+      document.getElementById('kpi-uploaded').textContent   = fmt(img.uploaded);
+      document.getElementById('kpi-uploaded-pct').textContent = img.uploadedPct + '% of total';
+      document.getElementById('kpi-img-failed').textContent = fmt(img.failed);
+      const matchRate = m.matchRate || '0';
+      const rateEl = document.getElementById('kpi-match-rate');
+      rateEl.textContent = matchRate + '%';
+      rateEl.className = 'stat-value ' + (matchRate >= 80 ? 'accent-green' : matchRate >= 60 ? 'accent-yellow' : 'accent-red');
+
+      // Charts
+      matchChart.data.datasets[0].data = [m.auto_matched, m.review_required, m.rejected];
+      matchChart.update('none');
+      imageChart.data.datasets[0].data = [img.pending, img.downloaded, img.uploaded, img.failed];
+      imageChart.update('none');
+
+      // Progress bars
+      const total = m.total || 1;
+      document.getElementById('matchProgress').innerHTML = [
+        { label: 'Auto Matched', val: m.auto_matched, color: '#22c55e' },
+        { label: 'Review Required', val: m.review_required, color: '#eab308' },
+        { label: 'Rejected', val: m.rejected, color: '#ef4444' },
+        { label: 'Accepted (manual)', val: m.accepted, color: '#38bdf8' },
+      ].map(r => `
+        <div class="progress-row">
+          <span class="label">${r.label}</span>
+          <span class="val">${fmt(r.val)}</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${((r.val/total)*100).toFixed(1)}%;background:${r.color}"></div>
+        </div>
+      `).join('');
+
+      // Queue table
+      document.getElementById('queueTable').innerHTML = Object.entries(q).map(([name, counts]) => `
+        <tr>
+          <td>${name.replace('_queue','').replace(/_/g,' ')}</td>
+          <td><span class="badge badge-yellow">${counts.waiting||0}</span></td>
+          <td><span class="badge badge-blue">${counts.active||0}</span></td>
+          <td><span class="badge badge-green">${counts.completed||0}</span></td>
+          <td><span class="badge badge-red">${counts.failed||0}</span></td>
+        </tr>
+      `).join('');
+
+      document.getElementById('lastUpdated').textContent =
+        'Updated ' + new Date().toLocaleTimeString();
+    }
+
+    function fmt(n) {
+      return Number(n || 0).toLocaleString();
+    }
+
+    socket.on('stats', updateStats);
+    socket.on('connect', () => {
+      document.getElementById('lastUpdated').textContent = 'Connected';
+    });
+
+    // Initial load
+    fetch('/api/stats').then(r => r.json()).then(updateStats).catch(console.error);
+
+    initCharts();
+  </script>
+</body>
+</html>

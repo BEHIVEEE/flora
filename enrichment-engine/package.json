@@ -1,0 +1,53 @@
+{
+  "name": "pharmacy-enrichment-engine",
+  "version": "1.0.0",
+  "description": "Production-ready product enrichment and matching system for pharmacy catalog",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "worker": "node src/workers/index.js",
+    "migrate": "node src/db/migrate.js",
+    "import": "node src/scripts/importFiles.js",
+    "match": "node src/scripts/runMatching.js",
+    "enrich:catalog": "node --max-old-space-size=16384 src/scripts/runEnrich.js",
+    "match:files": "node --max-old-space-size=16384 src/scripts/matchFromFiles.js",
+    "match:unmatched": "node --max-old-space-size=8192 src/scripts/matchUnmatched.js",
+    "match:pass3": "node --max-old-space-size=8192 src/scripts/matchUnmatched.js --pass3",
+    "match:pass4": "node --max-old-space-size=8192 src/scripts/matchUnmatched.js --pass4",
+    "match:max": "node --max-old-space-size=16384 src/scripts/runMaxMatch.js",
+    "match:promote-review": "node src/scripts/promoteReviewToMatched.js",
+    "export:website-import": "node src/scripts/exportWebsiteImport.js",
+    "enrich:production": "node --max-old-space-size=8192 src/scripts/runProduction.js",
+    "enrich:reports": "node src/scripts/generateReports.js",
+    "enrich:publish": "node src/scripts/publishEnrichment.js",
+    "enrich:publish-catalog": "node src/scripts/publishEnrichmentCatalog.js",
+    "enrich": "node src/scripts/runEnrichment.js",
+    "dashboard": "node src/dashboard/server.js",
+    "full-pipeline": "node src/scripts/fullPipeline.js"
+  },
+  "dependencies": {
+    "@bull-board/api": "^5.17.0",
+    "@bull-board/express": "^5.17.0",
+    "bullmq": "^5.7.0",
+    "cloudinary": "^2.2.0",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "fuse.js": "^7.0.0",
+    "ioredis": "^5.3.2",
+    "mysql2": "^3.9.7",
+    "node-fetch": "^3.3.2",
+    "p-limit": "^6.1.0",
+    "p-retry": "^6.2.0",
+    "socket.io": "^4.7.5",
+    "winston": "^3.13.0",
+    "winston-daily-rotate-file": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "uuid": "^10.0.0",
+    "chart.js": "^4.4.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

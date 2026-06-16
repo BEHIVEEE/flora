@@ -84,6 +84,8 @@ function detectAndNormalize(parsed) {
         console.log('[IMPORT] Sample row stock:', name, 'TotalStock:', r.TotalStock, 'SQTY:', r.SQTY, 'SFQTY:', r.SFQTY, '=> stock:', stock);
         return {
           name,
+          externalId: toStr(r['Product Code']),
+          productCode: toStr(r['Product Code']),
           brand: toStr(r.Company) || 'Generic',
           category: catSlug,
           subcategory: '',
@@ -326,6 +328,9 @@ const Import = () => {
         <div className="flex-1">
           <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Bulk Import Products</h1>
           <p className="text-slate-500 text-sm mt-0.5">Upload a CSV file to add products. Supports up to 100,000+ products with batch processing.</p>
+          <p className="text-teal-700 text-xs mt-2 bg-teal-50 border border-teal-100 rounded-lg px-3 py-2 max-w-2xl">
+            <strong>ProductList.csv from Prompt RMS:</strong> upload as-is — no extra columns needed. Stock and price come from your file; images, descriptions, and composition are filled automatically from the enrichment catalog (synced from your shop PC).
+          </p>
         </div>
         <Button variant="outline" onClick={downloadSample} className="rounded-full"><Download className="w-4 h-4 mr-1" /> Download Sample CSV</Button>
       </div>

@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Package, ShoppingBag, Clock, Settings, ExternalLink, LogOut, X, Menu, FileText, Users, Boxes, Bike, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, Clock, Settings, ExternalLink, LogOut, X, Menu, FileText, Users, Boxes, Bike, MessageSquare, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ const NAV = [
   { href: '/admin/chat', label: 'Chat', icon: MessageSquare },
   { href: '/admin/customers', label: 'Customers', icon: Users },
   { href: '/admin/inventory', label: 'Inventory', icon: Boxes },
+  { href: '/admin/enrichment', label: 'Product Enrichment', icon: Sparkles },
   { href: '/admin/categories', label: 'Categories', icon: Boxes },
   { href: '/admin/slots', label: 'Delivery Slots', icon: Clock },
   { href: '/admin/settings', label: 'Shop Settings', icon: Settings },

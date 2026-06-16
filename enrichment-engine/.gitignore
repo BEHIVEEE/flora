@@ -1,0 +1,8 @@
+node_modules/
+.env
+data/input/
+data/images/
+data/output/
+data/cache/
+logs/
+*.log

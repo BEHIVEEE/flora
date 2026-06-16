@@ -1,0 +1,82 @@
+{
+  "oral suspension": "oral suspension",
+  "suspension": "oral suspension",
+  "suspensions": "oral suspension",
+  "susp": "oral suspension",
+  "syrup": "oral suspension",
+  "syrups": "oral suspension",
+  "syr": "oral suspension",
+
+  "tablet": "tablet",
+  "tablets": "tablet",
+  "tab": "tablet",
+  "tabs": "tablet",
+
+  "capsule": "capsule",
+  "capsules": "capsule",
+  "cap": "capsule",
+  "caps": "capsule",
+
+  "injection": "injection",
+  "injections": "injection",
+  "inj": "injection",
+  "vial": "injection",
+
+  "drop": "drop",
+  "drops": "drop",
+
+  "cream": "cream",
+  "crm": "cream",
+
+  "ointment": "ointment",
+  "ointments": "ointment",
+  "oint": "ointment",
+
+  "gel": "gel",
+  "gels": "gel",
+
+  "lotion": "lotion",
+  "lotions": "lotion",
+
+  "powder": "powder",
+  "powders": "powder",
+  "pwd": "powder",
+
+  "soap": "soap",
+  "soaps": "soap",
+
+  "respule": "respule",
+  "respules": "respule",
+
+  "rotacap": "rotacap",
+  "rotacaps": "rotacap",
+
+  "face wash": "cleanser",
+  "facewash": "cleanser",
+  "wash": "cleanser",
+  "cleanser": "cleanser",
+
+  "mouth wash": "mouthwash",
+  "mouthwash": "mouthwash",
+
+  "solution": "solution",
+  "solutions": "solution",
+  "soln": "solution",
+
+  "spray": "spray",
+  "inhaler": "inhaler",
+  "sachet": "sachet",
+  "sachets": "sachet",
+  "softgel": "softgel",
+  "softgels": "softgel",
+  "shampoo": "shampoo",
+  "tonic": "tonic",
+  "liquid": "liquid",
+
+  "paste": "paste",
+  "pastes": "paste",
+  "toothpaste": "paste",
+
+  "oil": "oil",
+  "oils": "oil"
+}
