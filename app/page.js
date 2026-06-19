@@ -112,7 +112,7 @@ const Home = () => {
         <div className="flex animate-marquee whitespace-nowrap py-2.5 text-sm font-medium">
           {Array(2).fill(0).map((_, k) => (
             <div key={k} className="flex shrink-0">
-              {['🏥 Apka Apna Chemist – Trusted Care Near You','💖 Your Health, Our Priority Always','🚚 Free delivery on orders above ₹499','💊 60%–70% off on generic products','⏱️ Scheduled slot-based delivery'].map((t, i) => (
+              {['🏥 Apka Apna Chemist – Trusted Care Near You','💖 Your Health, Our Priority Always',`🚚 Free delivery on orders above ₹${freeDeliveryAbove}`,'💊 60%–70% off on generic products','⏱️ Scheduled slot-based delivery'].map((t, i) => (
                 <span key={i} className="mx-8 flex items-center gap-2 opacity-90">{t}</span>
               ))}
             </div>
@@ -286,7 +286,7 @@ const FAQ_ITEMS = [
   { q: 'Is FloraChemist a licensed online pharmacy?', a: 'Yes. FloraChemist is a licensed online pharmacy operating in India. All our medicines are sourced directly from authorised distributors and manufacturers. Every order is verified by our certified pharmacists before dispatch.' },
   { q: 'How do I buy medicines online at FloraChemist?', a: 'Simply search for your medicine in the search bar, add it to your cart, and place your order. For prescription medicines, upload a valid prescription from a registered doctor. We accept UPI, credit/debit cards, and cash on delivery.' },
   { q: 'Do I need a prescription to buy medicines?', a: 'Prescription (Rx) medicines require a valid doctor\'s prescription. Our pharmacists review every uploaded prescription before approving the order. Over-the-counter (OTC) products can be purchased without a prescription.' },
-  { q: 'How does delivery work?', a: 'We deliver on scheduled time slots that you choose at checkout. Pick a slot that suits you and our team will deliver your order in that window. Free delivery is available on orders above ₹499.' },
+  { q: 'How does delivery work?', a: 'We deliver on scheduled time slots that you choose at checkout. Pick a slot that suits you and our team will deliver your order in that window. Free delivery is available on orders above ₹299.' },
   { q: 'Are the medicines on FloraChemist authentic?', a: 'Absolutely. We source all medicines directly from authorised pharmaceutical distributors and manufacturers. Every product is verified for authenticity, batch number, and expiry before it reaches you.' },
   { q: 'Can I return medicines if they are wrong or damaged?', a: 'Yes, we have a 7-day easy return policy for wrong or damaged products. Contact our pharmacist support team and we will arrange a replacement or refund promptly.' },
   { q: 'How do I upload a prescription?', a: 'Click on "Upload Rx" in the top navigation bar or visit the Prescription page. You can upload a photo or PDF of your doctor\'s prescription. Our pharmacist will review it within a few hours and approve your order.' },

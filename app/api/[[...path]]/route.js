@@ -499,7 +499,7 @@ const DEFAULT_SETTINGS = {
   shopName: 'FloraChemist', tagline: 'Apka Apna Chemist',
   contactPhone: '+91 91672 61103', contactEmail: 'florachemistsupport@gmail.com',
   address: 'Dombivli, Maharashtra, India',
-  deliveryCharge: 49, freeDeliveryAbove: 499, minOrderValue: 99,
+  deliveryCharge: 49, freeDeliveryAbove: 299, minOrderValue: 99,
   pickupFee: 0,
   businessHours: { open: '09:00', close: '21:00' },
   slotsEnabled: true,
@@ -647,7 +647,7 @@ async function ensureSeed(db) {
         items.push({ id: p.id, name: p.name, price: p.price, mrp: p.mrp, image: p.image, brand: p.brand, packSize: p.packSize, qty });
       }
       const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
-      const deliveryFee = subtotal >= 499 ? 0 : 49;
+      const deliveryFee = subtotal >= 299 ? 0 : 49;
       const status = statuses[Math.floor(Math.random() * statuses.length)];
       sample.push({
         id: 'ORD-' + created.getTime().toString(36).toUpperCase() + '-' + uuidv4().slice(0, 4).toUpperCase(),

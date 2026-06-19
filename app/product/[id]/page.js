@@ -11,10 +11,12 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { cdn } from '@/lib/cdn-image';
 import ReportWrongImage from '@/components/ReportWrongImage';
+import { useSettings } from '@/components/SettingsProvider';
 
 const PDP = () => {
   const { id } = useParams();
   const { addItem, items, rxApproved } = useCart() || { addItem: () => {}, items: [], rxApproved: false };
+  const { freeDeliveryAbove } = useSettings();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [qty, setQty] = useState(1);
@@ -261,7 +263,7 @@ const PDP = () => {
 
             <div className="mt-4 grid grid-cols-3 gap-2">
               {[
-                { icon: Truck, t: 'Free delivery', s: 'Above ₹499' },
+                { icon: Truck, t: 'Free delivery', s: `Above ₹${freeDeliveryAbove}` },
                 { icon: ShieldCheck, t: 'Authentic', s: '100% verified' },
                 { icon: BadgePercent, t: 'Easy returns', s: '7-day policy' },
               ].map((f, i) => (
@@ -412,7 +414,7 @@ const PDP = () => {
 
               <div className="mt-6 grid grid-cols-3 gap-3">
                 {[
-                  { icon: Truck, t: 'Free delivery', s: 'Above ₹499' },
+                  { icon: Truck, t: 'Free delivery', s: `Above ₹${freeDeliveryAbove}` },
                   { icon: ShieldCheck, t: 'Authentic', s: '100% verified' },
                   { icon: BadgePercent, t: 'Easy returns', s: '7-day policy' },
                 ].map((f, i) => (
