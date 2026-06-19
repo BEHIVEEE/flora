@@ -60,7 +60,7 @@ const Home = () => {
               FloraChemist —<br />
               <span className="bg-gradient-to-r from-teal-600 via-emerald-600 to-teal-700 bg-clip-text text-transparent">Your Online Pharmacy.</span>
             </h1>
-            <p className="mt-4 text-[15px] md:text-lg text-slate-600 max-w-lg text-balance">Buy medicines, healthcare devices &amp; wellness products online in India. Fast doorstep delivery, licensed pharmacists, 100% authentic — trusted by 1 lakh+ families.</p>
+            <p className="mt-4 text-[15px] md:text-lg text-slate-600 max-w-lg text-balance">Buy medicines, healthcare devices &amp; wellness products online in India. Scheduled slot delivery, licensed pharmacists, 100% authentic — trusted by 1 lakh+ families.</p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link href="/products">
                 <Button size="lg" className="bg-teal-600 hover:bg-teal-700 text-white h-12 px-6 rounded-full shadow-lift font-semibold">Shop Now <ArrowRight className="ml-1 w-4 h-4" /></Button>
@@ -112,7 +112,7 @@ const Home = () => {
         <div className="flex animate-marquee whitespace-nowrap py-2.5 text-sm font-medium">
           {Array(2).fill(0).map((_, k) => (
             <div key={k} className="flex shrink-0">
-              {['🏥 Apka Apna Chemist – Trusted Care Near You','💖 Your Health, Our Priority Always','🚚 Free delivery on orders above ₹499','💊 60%–70% off on generic products','💊 10% off on medicines','⏱️ Scheduled slot-based delivery'].map((t, i) => (
+              {['🏥 Apka Apna Chemist – Trusted Care Near You','💖 Your Health, Our Priority Always','🚚 Free delivery on orders above ₹499','💊 60%–70% off on generic products','⏱️ Scheduled slot-based delivery'].map((t, i) => (
                 <span key={i} className="mx-8 flex items-center gap-2 opacity-90">{t}</span>
               ))}
             </div>
@@ -286,7 +286,7 @@ const FAQ_ITEMS = [
   { q: 'Is FloraChemist a licensed online pharmacy?', a: 'Yes. FloraChemist is a licensed online pharmacy operating in India. All our medicines are sourced directly from authorised distributors and manufacturers. Every order is verified by our certified pharmacists before dispatch.' },
   { q: 'How do I buy medicines online at FloraChemist?', a: 'Simply search for your medicine in the search bar, add it to your cart, and place your order. For prescription medicines, upload a valid prescription from a registered doctor. We accept UPI, credit/debit cards, and cash on delivery.' },
   { q: 'Do I need a prescription to buy medicines?', a: 'Prescription (Rx) medicines require a valid doctor\'s prescription. Our pharmacists review every uploaded prescription before approving the order. Over-the-counter (OTC) products can be purchased without a prescription.' },
-  { q: 'How fast is the delivery?', a: 'We offer same-day and next-day delivery in select areas, and 2–3 day delivery across India. You can also choose a scheduled delivery slot that suits your convenience. Free delivery is available on orders above ₹499.' },
+  { q: 'How does delivery work?', a: 'We deliver on scheduled time slots that you choose at checkout. Pick a slot that suits you and our team will deliver your order in that window. Free delivery is available on orders above ₹499.' },
   { q: 'Are the medicines on FloraChemist authentic?', a: 'Absolutely. We source all medicines directly from authorised pharmaceutical distributors and manufacturers. Every product is verified for authenticity, batch number, and expiry before it reaches you.' },
   { q: 'Can I return medicines if they are wrong or damaged?', a: 'Yes, we have a 7-day easy return policy for wrong or damaged products. Contact our pharmacist support team and we will arrange a replacement or refund promptly.' },
   { q: 'How do I upload a prescription?', a: 'Click on "Upload Rx" in the top navigation bar or visit the Prescription page. You can upload a photo or PDF of your doctor\'s prescription. Our pharmacist will review it within a few hours and approve your order.' },
@@ -297,7 +297,7 @@ const FAQ = () => {
   const [open, setOpen] = useState(null);
   return (
     <section className="container max-w-4xl mx-auto px-4 py-14 md:py-20">
-      <div className="text-center mb-10">
+      <div className="text-center mb-10" id="faq">
         <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Frequently Asked Questions</h2>
         <p className="text-slate-500 mt-2">Everything you need to know about FloraChemist online pharmacy</p>
       </div>

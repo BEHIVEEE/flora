@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { cdn } from '@/lib/cdn-image';
+import ReportWrongImage from '@/components/ReportWrongImage';
 
 const PDP = () => {
   const { id } = useParams();
@@ -163,6 +164,14 @@ const PDP = () => {
           <div className="relative mx-3 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden" style={{ height: '55vw', maxHeight: '300px' }}>
             <img src={cdn(p.image, { w: 800, h: 800, fit: 'contain' })} alt={p.name} className="max-w-[70%] max-h-[85%] object-contain" />
             {discount > 0 && <span className="absolute top-3 left-3 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
+            {p.image && (
+              <ReportWrongImage
+                productId={p.id}
+                productName={p.name}
+                imageUrl={p.image}
+                variant="overlay"
+              />
+            )}
           </div>
 
           <div className="mt-2 px-3 flex gap-2 overflow-x-auto scrollbar-hide justify-center">
@@ -172,6 +181,11 @@ const PDP = () => {
               </div>
             ))}
           </div>
+          {p.image && (
+            <div className="mt-2 px-3 flex justify-center">
+              <ReportWrongImage productId={p.id} productName={p.name} imageUrl={p.image} />
+            </div>
+          )}
 
           <div className="px-3 mt-4">
             <div className="text-xs font-bold uppercase tracking-wider text-teal-700">{p.brand}</div>
@@ -280,7 +294,24 @@ const PDP = () => {
               <div className="relative bg-slate-50 rounded-3xl overflow-hidden border border-slate-100 mx-auto w-full" style={{ paddingBottom: '100%' }}>
                 <img src={cdn(p.image, { w: 1000, h: 1000 })} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
                 {discount > 0 && <span className="absolute top-3 left-3 bg-rose-500 text-white text-xs font-bold px-2.5 py-1 rounded-md">{discount}% OFF</span>}
+                {p.image && (
+                  <ReportWrongImage
+                    productId={p.id}
+                    productName={p.name}
+                    imageUrl={p.image}
+                    variant="overlay"
+                  />
+                )}
               </div>
+              {p.image && (
+                <div className="mt-2 flex justify-center">
+                  <ReportWrongImage
+                    productId={p.id}
+                    productName={p.name}
+                    imageUrl={p.image}
+                  />
+                </div>
+              )}
               <div className="mt-3 grid grid-cols-4 gap-2">
                 {Array(4).fill(0).map((_, i) => (
                   <div key={i} className="aspect-square bg-slate-50 rounded-xl border border-slate-200 overflow-hidden hover:border-teal-400 cursor-pointer">

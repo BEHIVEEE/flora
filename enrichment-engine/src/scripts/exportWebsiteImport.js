@@ -132,7 +132,7 @@ async function run() {
     if (MATCHED_ONLY && !match) continue;
 
     const mrp = rms.mrp || match?.mrp || 0;
-    const price = mrp ? Math.max(1, Math.round(mrp * 0.9)) : 0;
+    const price = mrp || 0;
     const imageUrl = match?.imageUrl || '';
     if (imageUrl) withImages++;
 

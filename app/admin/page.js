@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { IndianRupee, ShoppingBag, Package, AlertTriangle, TrendingUp, Clock, Eye, ArrowUpRight, Boxes } from 'lucide-react';
+import { IndianRupee, ShoppingBag, Package, AlertTriangle, TrendingUp, Clock, Eye, ArrowUpRight, Boxes, ImageOff } from 'lucide-react';
 import StatCard from '@/components/admin/StatCard';
 import { Button } from '@/components/ui/button';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, CartesianGrid } from 'recharts';
@@ -63,6 +63,21 @@ const Dashboard = () => {
         <StatCard icon={Package} label="Total Products" value={stats.productsCount} sub={`${stats.lowStockCount} low stock`} accent="blue" />
         <StatCard icon={TrendingUp} label="Month Revenue" value={`₹${stats.monthRevenue.toLocaleString('en-IN')}`} sub={`${stats.monthOrders} orders · 30 days`} accent="violet" />
       </div>
+
+      {stats.pendingImageReports > 0 && (
+        <Link href="/admin/image-reports" className="flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 hover:bg-amber-100 transition-colors">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+              <ImageOff className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-bold text-amber-900">{stats.pendingImageReports} wrong image report{stats.pendingImageReports === 1 ? '' : 's'} pending</div>
+              <div className="text-xs text-amber-800">Review flagged product photos from customers or staff.</div>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" className="rounded-full shrink-0 border-amber-300 bg-white">Review</Button>
+        </Link>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Chart */}

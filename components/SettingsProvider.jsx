@@ -4,8 +4,8 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 const DEFAULT_SETTINGS = {
   shopName: 'FloraChemist',
   tagline: 'Apka Apna Chemist',
-  contactPhone: '1800-XXX-XXXX',
-  contactEmail: 'care@chemistshop.top',
+  contactPhone: '+91 91672 61103',
+  contactEmail: 'florachemistsupport@gmail.com',
   address: 'Thane, Maharashtra, India',
   deliveryCharge: 49,
   freeDeliveryAbove: 499,

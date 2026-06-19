@@ -72,7 +72,7 @@ function detectAndNormalize(parsed) {
       .map(r => {
         const mrp = Number(r.MRP) || 0;
         const ptr = Number(r.PTR) || 0;
-        const price = mrp ? Math.max(1, Math.round(mrp * 0.9)) : ptr; // MRP - 10%
+        const price = mrp || ptr;
         const catRaw = toStr(r.Category).toLowerCase();
         const catSlug = catMap[catRaw] || 'allopathic-medicines';
         // Stock: prefer TotalStock, fallback to SQTY + SFQTY
@@ -115,8 +115,7 @@ function detectAndNormalize(parsed) {
       const stock = qty + free;
       // PTR (price to retailer / per-unit purchase) is per-strip, not per-unit. Use MRP as customer price.
       const mrp = Number(r.MRP) || 0;
-      // Default selling price = MRP minus 10% discount (rounded)
-      const price = mrp ? Math.max(1, Math.round(mrp * 0.9)) : Number(r.PTR) || 0;
+      const price = mrp || Number(r.PTR) || 0;
       return {
         name: (r.ProductDesc || '').trim(),
         brand: (r.Manufacturer || r.MfgrNick || 'Generic').trim(),

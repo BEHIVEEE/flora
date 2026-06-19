@@ -278,7 +278,7 @@ const QuickDeliveryCheck = () => {
           <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
           <div>
             <div className="font-semibold text-emerald-900">Great! We deliver to your area</div>
-            <div className="text-sm text-emerald-700 mt-1">You're {distance?.toFixed(1)} km away from our shop. Order now for fast delivery!</div>
+            <div className="text-sm text-emerald-700 mt-1">You&apos;re {distance?.toFixed(1)} km away from our shop. Choose a delivery slot at checkout.</div>
           </div>
         </div>
       )}

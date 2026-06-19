@@ -497,7 +497,7 @@ async function requireRider(req, db) {
 const DEFAULT_SETTINGS = {
   id: 'main',
   shopName: 'FloraChemist', tagline: 'Apka Apna Chemist',
-  contactPhone: '1800-XXX-XXXX', contactEmail: 'care@chemistshop.top',
+  contactPhone: '+91 91672 61103', contactEmail: 'florachemistsupport@gmail.com',
   address: 'Dombivli, Maharashtra, India',
   deliveryCharge: 49, freeDeliveryAbove: 499, minOrderValue: 99,
   pickupFee: 0,
@@ -871,28 +871,6 @@ export async function GET(req, { params }) {
       return json({ product, related }, 200, 'med');
     }
 
-    if (path === 'notify-restock') {
-      const { productId, email, phone, name } = body;
-      if (!productId) return json({ ok: false, error: 'productId required' }, 400);
-      const product = await db.collection('products').findOne({ id: productId }, { projection: { _id: 0, id: 1, name: 1, category: 1, brand: 1 } });
-      if (!product) return json({ ok: false, error: 'Product not found' }, 404);
-      const entry = {
-        id: 'notify-' + uuidv4().slice(0, 10),
-        productId,
-        productName: product.name,
-        category: product.category || null,
-        brand: product.brand || null,
-        email: email ? String(email).trim().toLowerCase() : null,
-        phone: phone ? String(phone).trim() : null,
-        name: name ? String(name).trim() : null,
-        createdAt: new Date().toISOString(),
-        notifiedAt: null,
-        status: 'pending',
-      };
-      await db.collection('product_notifications').insertOne(entry);
-      return json({ ok: true });
-    }
-
     if (path === 'orders') {
       const userId = searchParams.get('userId');
       const token = getBearer(req);
@@ -971,7 +949,7 @@ export async function GET(req, { params }) {
       const weekAgo = new Date(Date.now() - 7 * 86400000);
       const monthAgo = new Date(Date.now() - 30 * 86400000);
 
-      const [todayAgg, weekAgg, monthAgg, productsCount, lowStock, pendingCount, pendingRx, totalOrders, recent, notifyPending, notifyTop] = await Promise.all([
+      const [todayAgg, weekAgg, monthAgg, productsCount, lowStock, pendingCount, pendingRx, totalOrders, recent, notifyPending, notifyTop, pendingImageReports] = await Promise.all([
         db.collection('orders').aggregate([
           { $match: { createdAt: { $gte: startOfToday.toISOString() } } },
           { $group: { _id: null, revenue: { $sum: '$total' }, count: { $sum: 1 } } },
@@ -996,6 +974,7 @@ export async function GET(req, { params }) {
           { $sort: { count: -1 } },
           { $limit: 10 },
         ]).toArray(),
+        db.collection('image_reports').countDocuments({ status: 'pending' }),
       ]);
 
       const todayRevenue = todayAgg[0]?.revenue || 0;
@@ -1041,7 +1020,29 @@ export async function GET(req, { params }) {
         topProducts: topProducts.map(p => ({ id: p._id, name: p.name, price: p.price, image: p.image, qty: p.qty })),
         notifyPending,
         notifyTop: notifyTop.map(n => ({ productId: n._id, productName: n.productName, category: n.category, count: n.count })),
+        pendingImageReports,
       });
+    }
+
+    if (path === 'admin/image-reports') {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const status = searchParams.get('status') || 'pending';
+      const search = searchParams.get('search');
+      const filter = {};
+      if (status && status !== 'all') filter.status = status;
+      if (search) {
+        filter.$or = [
+          { productName: { $regex: search, $options: 'i' } },
+          { productBrand: { $regex: search, $options: 'i' } },
+          { note: { $regex: search, $options: 'i' } },
+        ];
+      }
+      const [reports, pendingCount] = await Promise.all([
+        db.collection('image_reports').find(filter, { projection: { _id: 0 } }).sort({ createdAt: -1 }).limit(200).toArray(),
+        db.collection('image_reports').countDocuments({ status: 'pending' }),
+      ]);
+      return json({ reports, pendingCount });
     }
 
     if (path === 'admin/revenue') {
@@ -2016,6 +2017,86 @@ export async function POST(req, { params }) {
       return json({ address: addr }, 200, 'none');
     }
 
+    if (path === 'notify-restock') {
+      const { productId, email, phone, name } = body;
+      if (!productId) return json({ ok: false, error: 'productId required' }, 400);
+      const product = await db.collection('products').findOne({ id: productId }, { projection: { _id: 0, id: 1, name: 1, category: 1, brand: 1 } });
+      if (!product) return json({ ok: false, error: 'Product not found' }, 404);
+      const entry = {
+        id: 'notify-' + uuidv4().slice(0, 10),
+        productId,
+        productName: product.name,
+        category: product.category || null,
+        brand: product.brand || null,
+        email: email ? String(email).trim().toLowerCase() : null,
+        phone: phone ? String(phone).trim() : null,
+        name: name ? String(name).trim() : null,
+        createdAt: new Date().toISOString(),
+        notifiedAt: null,
+        status: 'pending',
+      };
+      await db.collection('product_notifications').insertOne(entry);
+      return json({ ok: true });
+    }
+
+    if (path === 'report-wrong-image') {
+      const ip = getClientIp(req);
+      const rl = rateLimit(ip, 'report-wrong-image', 8, 60000);
+      if (rl.limited) return json({ ok: false, error: `Too many reports. Try again in ${rl.retryAfter}s.` }, 429);
+
+      const { productId, note, reporterType } = body;
+      if (!productId) return json({ ok: false, error: 'productId required' }, 400);
+
+      const product = await db.collection('products').findOne(
+        { id: productId },
+        { projection: { _id: 0, id: 1, name: 1, brand: 1, image: 1, images: 1 } }
+      );
+      if (!product) return json({ ok: false, error: 'Product not found' }, 404);
+      if (!product.image) return json({ ok: false, error: 'This product has no image to report' }, 400);
+
+      let reporter = { id: null, name: null, email: null, role: null };
+      const token = getBearer(req);
+      const authData = token ? verifyToken(token) : null;
+      if (authData) {
+        const user = await db.collection('users').findOne(
+          { id: authData.uid },
+          { projection: { _id: 0, id: 1, name: 1, email: 1, role: 1 } }
+        );
+        if (user) reporter = user;
+      }
+
+      const type = reporter.role === 'admin' ? 'admin' : (reporterType === 'admin' ? 'admin' : 'customer');
+      const dupFilter = {
+        productId,
+        imageUrl: product.image,
+        status: 'pending',
+        ...(reporter.id ? { reporterId: reporter.id } : { ip }),
+      };
+      const existing = await db.collection('image_reports').findOne(dupFilter);
+      if (existing) return json({ ok: true, id: existing.id, duplicate: true });
+
+      const report = {
+        id: 'img-' + uuidv4().slice(0, 10),
+        productId,
+        productName: product.name,
+        productBrand: product.brand || '',
+        imageUrl: product.image,
+        note: note ? String(note).trim().slice(0, 500) : '',
+        reporterType: type,
+        reporterId: reporter.id,
+        reporterName: reporter.name || null,
+        reporterEmail: reporter.email || null,
+        status: 'pending',
+        adminNotes: null,
+        resolvedAt: null,
+        resolvedBy: null,
+        ip,
+        createdAt: new Date().toISOString(),
+      };
+      await db.collection('image_reports').insertOne(report);
+      return json({ ok: true, id: report.id });
+    }
+
     if (path === 'seed/reset') {
       const admin = await requireAdmin(req, db);
       if (admin.error) return admin.error;
@@ -2315,6 +2396,38 @@ export async function PATCH(req, { params }) {
       );
       await rxAuditLog(db, { action: 'patch', prescriptionId: id, userId: admin.user.id, role: 'admin', ip: getClientIp(req), meta: update });
       return json({ prescription });
+    }
+
+    if (path.startsWith('admin/image-reports/')) {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const id = path.replace('admin/image-reports/', '');
+      const nextStatus = String(body.status || '').toLowerCase();
+      if (!['resolved', 'dismissed'].includes(nextStatus)) {
+        return json({ ok: false, error: "status must be 'resolved' or 'dismissed'" }, 400);
+      }
+      const report = await db.collection('image_reports').findOne({ id }, { projection: { _id: 0 } });
+      if (!report) return json({ ok: false, error: 'Report not found' }, 404);
+
+      const now = new Date().toISOString();
+      const update = {
+        status: nextStatus,
+        resolvedAt: now,
+        resolvedBy: admin.user.id,
+        adminNotes: body.adminNotes ? String(body.adminNotes).slice(0, 500) : report.adminNotes,
+        updatedAt: now,
+      };
+      await db.collection('image_reports').updateOne({ id }, { $set: update });
+
+      if (nextStatus === 'resolved' && body.clearImage && report.productId) {
+        await db.collection('products').updateOne(
+          { id: report.productId },
+          { $set: { image: '', images: [], updatedAt: now } }
+        );
+      }
+
+      const updated = await db.collection('image_reports').findOne({ id }, { projection: { _id: 0 } });
+      return json({ ok: true, report: updated });
     }
 
     return json({ error: 'Not found' }, 404);

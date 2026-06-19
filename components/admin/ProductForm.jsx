@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import ImageUploader from '@/components/admin/ImageUploader';
+import ReportWrongImage from '@/components/ReportWrongImage';
 
 const ProductForm = ({ title, initial = {}, onSave, saving }) => {
   const [form, setForm] = useState({
@@ -111,6 +112,16 @@ const ProductForm = ({ title, initial = {}, onSave, saving }) => {
               </div>
             )}
             <ImageUploader images={form.images} onChange={(imgs) => update('images', typeof imgs === 'function' ? imgs(form.images) : imgs)} />
+            {initial.id && form.images?.[0] && (
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                <ReportWrongImage
+                  productId={initial.id}
+                  productName={form.name || initial.name}
+                  imageUrl={form.images[0]}
+                  variant="admin"
+                />
+              </div>
+            )}
           </Card>
         </div>
 

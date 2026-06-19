@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Package, ShoppingBag, Clock, Settings, ExternalLink, LogOut, X, Menu, FileText, Users, Boxes, Bike, MessageSquare, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingBag, Clock, Settings, ExternalLink, LogOut, X, Menu, FileText, Users, Boxes, Bike, MessageSquare, Sparkles, ImageOff } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { toast } from 'sonner';
@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 const NAV = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/admin/products', label: 'Products', icon: Package },
+  { href: '/admin/image-reports', label: 'Wrong Images', icon: ImageOff },
   { href: '/admin/orders', label: 'Orders', icon: ShoppingBag },
   { href: '/admin/riders', label: 'Riders', icon: Bike },
   { href: '/admin/prescriptions', label: 'Prescriptions', icon: FileText },

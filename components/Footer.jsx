@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Truck, ShieldCheck, BadgePercent, Phone, Mail, MapPin, Facebook, Instagram, Twitter, Youtube } from 'lucide-react';
 import { useSettings } from './SettingsProvider';
+import { triggerPwaInstall } from './PwaInstall';
 
 const Footer = () => {
   const { shopName, tagline, contactPhone, contactEmail, address, freeDeliveryAbove } = useSettings();
@@ -71,8 +72,13 @@ const Footer = () => {
             <h4 className="font-semibold text-slate-900 mb-3 text-sm">Help</h4>
             <ul className="space-y-2 text-sm text-slate-600">
               <li><Link href="/prescription" className="hover:text-teal-700">Upload Prescription</Link></li>
+              <li>
+                <button type="button" onClick={triggerPwaInstall} className="hover:text-teal-700 text-left">
+                  Install App
+                </button>
+              </li>
               <li><Link href="/refund-policy" className="hover:text-teal-700">Refund & Replacement Policy</Link></li>
-              <li><a href="#" className="hover:text-teal-700">FAQ</a></li>
+              <li><Link href="/#faq" className="hover:text-teal-700">FAQ</Link></li>
               <li><Link href="/privacy-policy" className="hover:text-teal-700">Privacy Policy</Link></li>
             </ul>
           </div>

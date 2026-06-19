@@ -59,7 +59,7 @@ const SECTIONS = [
     id: 'contact',
     title: '6. Need Help?',
     points: [
-      'Call or WhatsApp our helpline: <a href="tel:+919987654321">+91 99876 54321</a>.',
+      'Call or WhatsApp our helpline: <a href="tel:+919167261103">+91 91672 61103</a>.',
       'Email our support desk: <a href="mailto:support@florachemist.online">support@florachemist.online</a>.',
       'Visit our store: Flora Chemist, Dombivli, Maharashtra, India.',
     ],
@@ -134,7 +134,7 @@ const RefundPolicyPage = () => {
               <div className="flex flex-col md:flex-row items-start md:items-center gap-4 bg-slate-50 rounded-xl p-4">
                 <Package className="w-5 h-5 text-slate-500 shrink-0" />
                 <div className="text-sm text-slate-700">
-                  Need to raise a replacement request? Email <a href="mailto:support@florachemist.online" className="text-amber-700 font-semibold hover:underline">support@florachemist.online</a> or WhatsApp us on <a href="tel:+919987654321" className="text-amber-700 font-semibold hover:underline">+91 99876 54321</a> within 48 hours of delivery.
+                  Need to raise a replacement request? Email <a href="mailto:support@florachemist.online" className="text-amber-700 font-semibold hover:underline">support@florachemist.online</a> or WhatsApp us on <a href="tel:+919167261103" className="text-amber-700 font-semibold hover:underline">+91 91672 61103</a> within 48 hours of delivery.
                 </div>
               </div>
             </div>

@@ -7,6 +7,8 @@ import Footer from '@/components/Footer';
 import CartProvider from '@/components/CartProvider';
 import AuthProvider from '@/components/AuthProvider';
 import SettingsProvider from '@/components/SettingsProvider';
+import PwaRegister from '@/components/PwaRegister';
+import PwaInstall from '@/components/PwaInstall';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
 
@@ -19,7 +21,7 @@ export const metadata = {
     default: 'FloraChemist — Online Pharmacy | Buy Medicines Online in India',
     template: '%s | FloraChemist',
   },
-  description: 'FloraChemist is your trusted online pharmacy. Buy medicines, healthcare devices, wellness products & more. Fast doorstep delivery, licensed pharmacists, 100% authentic — trusted by 1 lakh+ families across India.',
+  description: 'FloraChemist is your trusted online pharmacy. Buy medicines, healthcare devices, wellness products & more. Scheduled slot delivery, licensed pharmacists, 100% authentic — trusted by 1 lakh+ families across India.',
   keywords: 'FloraChemist, online pharmacy India, buy medicines online, chemist near me, prescription medicines, healthcare store, wellness products, florachemist.online',
   authors: [{ name: 'FloraChemist', url: SITE_URL }],
   creator: 'FloraChemist',
@@ -41,7 +43,16 @@ export const metadata = {
     description: 'Buy medicines, healthcare devices, wellness products & more. Fast delivery, licensed pharmacists, 100% authentic.',
     images: [`${SITE_URL}/og-image.png`],
   },
-  icons: { icon: '/favicon.ico', apple: '/apple-touch-icon.png' },
+  icons: { icon: '/icon', apple: '/apple-icon' },
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: SITE_NAME,
+  },
+  other: {
+    'mobile-web-app-capable': 'yes',
+  },
   verification: {},
 };
 
@@ -88,7 +99,7 @@ const App = ({ children }) => {
                 mainEntity: [
                   { '@type': 'Question', name: 'Is FloraChemist a licensed online pharmacy?', acceptedAnswer: { '@type': 'Answer', text: 'Yes. FloraChemist is a licensed online pharmacy in India. All medicines are sourced from authorised distributors and verified by certified pharmacists.' } },
                   { '@type': 'Question', name: 'How do I buy medicines online at FloraChemist?', acceptedAnswer: { '@type': 'Answer', text: 'Search for your medicine, add to cart, and place your order. Upload a prescription for Rx medicines. We accept UPI, cards, and cash on delivery.' } },
-                  { '@type': 'Question', name: 'How fast is medicine delivery?', acceptedAnswer: { '@type': 'Answer', text: 'Same-day and next-day delivery in select areas. 2-3 day delivery across India. Free delivery on orders above ₹499.' } },
+                  { '@type': 'Question', name: 'How does delivery work at FloraChemist?', acceptedAnswer: { '@type': 'Answer', text: 'Choose a scheduled delivery slot at checkout. Our team delivers your order in the time window you select. Free delivery on orders above ₹499.' } },
                   { '@type': 'Question', name: 'Are medicines on FloraChemist authentic?', acceptedAnswer: { '@type': 'Answer', text: 'Yes. All medicines are sourced directly from authorised pharmaceutical distributors and verified for authenticity, batch number, and expiry.' } },
                 ],
               },
@@ -119,6 +130,8 @@ const App = ({ children }) => {
           </AuthProvider>
         </SettingsProvider>
         <Toaster richColors position="top-center" />
+        <PwaRegister />
+        <PwaInstall />
       </body>
     </html>
   );
