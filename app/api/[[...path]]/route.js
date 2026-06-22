@@ -531,9 +531,31 @@ async function ensureAdminUser(db) {
   try { await db.collection('admin_users').drop(); } catch {}
 }
 
+async function ensureUserIndexes(db) {
+  // Phone-only OTP users have no email; a non-sparse unique email index treats them all as null.
+  await db.collection('users').updateMany(
+    { $or: [{ email: null }, { email: '' }] },
+    { $unset: { email: '' } }
+  );
+  try {
+    await db.collection('users').dropIndex('email_1');
+  } catch {}
+  try {
+    await db.collection('users').dropIndex('phone_1_role_1');
+  } catch {}
+  await db.collection('users').createIndex({ email: 1 }, { unique: true, sparse: true });
+  await db.collection('users').createIndex(
+    { phone: 1, role: 1 },
+    {
+      unique: true,
+      partialFilterExpression: { phone: { $exists: true, $type: 'string', $nin: [null, ''] } },
+    }
+  );
+}
+
 async function ensureIndexes(db) {
   try {
-    await db.collection('users').createIndex({ email: 1 }, { unique: true });
+    await ensureUserIndexes(db);
     await db.collection('users').createIndex({ id: 1 }, { unique: true });
     // Products: scaled for 100k+ catalog
     await db.collection('products').createIndex({ id: 1 }, { unique: true });
@@ -1574,20 +1596,30 @@ export async function POST(req, { params }) {
         // Find or create user in our database
         const phoneClean = phone?.replace(/\D/g, '').slice(-10) || userInfo.phoneNumber?.replace(/\D/g, '').slice(-10);
         
-        let user = await db.collection('users').findOne({ phone: phoneClean });
+        let user = await db.collection('users').findOne({
+          phone: phoneClean,
+          role: { $in: ['user', 'customer'] },
+        });
         
         if (!user) {
-          // Create new user
           const newUser = {
             id: 'u-' + uuidv4().slice(0, 8),
-            name: userInfo.displayName || '',
-            email: userInfo.email || '',
+            name: userInfo.displayName || `User ${phoneClean.slice(-4)}`,
             phone: phoneClean,
-            role: 'customer',
+            role: 'user',
+            isVerified: true,
             createdAt: new Date().toISOString(),
           };
+          const emailLc = userInfo.email?.toLowerCase?.().trim();
+          if (emailLc) newUser.email = emailLc;
           await db.collection('users').insertOne(newUser);
           user = newUser;
+        } else if (user.role === 'customer') {
+          await db.collection('users').updateOne(
+            { id: user.id },
+            { $set: { role: 'user', updatedAt: new Date().toISOString() } }
+          );
+          user.role = 'user';
         }
         
         // Generate our JWT
