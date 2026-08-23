@@ -10,12 +10,13 @@ const ImportJobBanner = () => {
   if (result || !importing || !progress) return null;
 
   const isUploading = progress.status === 'uploading' && !uploadInterrupted;
-  const pct = isUploading
+  const isUploadPhase = progress.status === 'uploading' || uploadInterrupted;
+  const pct = isUploadPhase
     ? (progress.totalBatches ? Math.min(100, (progress.currentBatch / progress.totalBatches) * 100) : 0)
     : (progress.total ? Math.min(100, (progress.current / progress.total) * 100) : 0);
 
   const label = uploadInterrupted
-    ? `Upload paused at batch ${progress.currentBatch} / ${progress.totalBatches} — tap to resume`
+    ? `Upload paused at batch ${progress.currentBatch} / ${progress.totalBatches} — re-select same file to resume`
     : isUploading
       ? `Uploading batch ${progress.currentBatch} / ${progress.totalBatches}`
       : `Importing ${progress.current.toLocaleString()} / ${progress.total.toLocaleString()} products`;

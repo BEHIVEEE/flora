@@ -200,8 +200,8 @@ const Import = () => {
   const [parsed, setParsed] = useState(null); // {headers, rows, format}
   const [categories, setCategories] = useState([]);
   const {
-    importing, result, progress, uploadInterrupted,
-    startImport, resumeImport, cancelImport, resetResult,
+    importing, result, progress, uploadInterrupted, isUploadingActive,
+    startImport, resumeImport, resumeFromCache, cancelImport, resetResult,
   } = useImportJobContext();
   const hasActiveJob = importing && !result;
 
@@ -355,14 +355,27 @@ const Import = () => {
             </Button>
           </div>
 
-          {uploadInterrupted ? (
-            <div
-              onClick={() => fileRef.current?.click()}
-              className="border-2 border-dashed border-amber-300 bg-amber-50/50 rounded-xl p-6 text-center cursor-pointer hover:bg-amber-50"
-            >
-              <div className="font-semibold text-amber-900">Click to re-select your XLS/CSV file and resume</div>
-              <div className="text-xs text-amber-700 mt-1">Upload will continue from batch {(progress?.currentBatch || 0) + 1} of {progress?.totalBatches || '?'}</div>
-              <input ref={fileRef} type="file" accept=".csv,.xls,.xlsx" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
+          {uploadInterrupted && !isUploadingActive ? (
+            <div className="space-y-3">
+              <div
+                onClick={() => fileRef.current?.click()}
+                className="border-2 border-dashed border-amber-300 bg-amber-50/50 rounded-xl p-6 text-center cursor-pointer hover:bg-amber-50"
+              >
+                <div className="font-semibold text-amber-900">Click to re-select your XLS/CSV file and resume</div>
+                <div className="text-xs text-amber-700 mt-1">
+                  Upload will continue from batch {(progress?.currentBatch || 0) + 1} of {progress?.totalBatches || '?'}
+                  · keep this tab open until all {progress?.totalBatches || '?'} batches finish
+                </div>
+                <input ref={fileRef} type="file" accept=".csv,.xls,.xlsx" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-full"
+                onClick={() => resumeFromCache()}
+              >
+                Try resume from browser cache (no re-upload)
+              </Button>
             </div>
           ) : (
             <ImportProgressPanel progress={progress} />

@@ -82,10 +82,74 @@ function sanitizeImages(images) {
 
 const BULK_IMPORT_LIMIT = 200;
 
+/** Vercel/serverless: allow long-running import status + process requests */
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
+async function loadExistingProductsForImport(db, items) {
+  const existingMap = new Map();
+
+  const extIds = [...new Set(
+    items.map((r) => String(r.externalId || r.productCode || '').trim()).filter(Boolean)
+  )];
+  if (extIds.length) {
+    const byExt = await db.collection('products').find(
+      { externalId: { $in: extIds } },
+      {
+        projection: {
+          _id: 1, id: 1, name: 1, brand: 1, externalId: 1, stock: 1,
+          image: 1, images: 1, packSize: 1, description: 1, category: 1,
+          prescription: 1, composition: 1, categoryId: 1, subcategory: 1, subcategoryId: 1,
+        },
+      }
+    ).toArray();
+    for (const p of byExt) {
+      const key = (p.name || '').toLowerCase() + '|' + (p.brand || '').toLowerCase();
+      existingMap.set(key, p);
+      if (p.externalId) existingMap.set(`ext:${p.externalId}`, p);
+    }
+  }
+
+  const needNameLookup = items.filter((raw) => {
+    if (!raw.name) return false;
+    const ext = String(raw.externalId || raw.productCode || '').trim();
+    if (ext && existingMap.has(`ext:${ext}`)) return false;
+    const brandName = (raw.brand || 'Generic');
+    const key = (raw.name || '').toLowerCase() + '|' + brandName.toLowerCase();
+    return !existingMap.has(key);
+  });
+
+  for (let i = 0; i < needNameLookup.length; i += 25) {
+    const batch = needNameLookup.slice(i, i + 25);
+    const orClause = batch.map((raw) => {
+      const name = raw.name?.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const brand = (raw.brand || 'Generic').toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return {
+        name: { $regex: `^${name}$`, $options: 'i' },
+        brand: { $regex: `^${brand}$`, $options: 'i' },
+      };
+    });
+    if (!orClause.length) continue;
+    const found = await db.collection('products').find({ $or: orClause }).toArray();
+    for (const p of found) {
+      const key = (p.name || '').toLowerCase() + '|' + (p.brand || '').toLowerCase();
+      existingMap.set(key, p);
+    }
+  }
+
+  return existingMap;
+}
+
+function resolveExistingProduct(existingMap, raw, brandName) {
+  const ext = String(raw.externalId || raw.productCode || '').trim();
+  if (ext && existingMap.has(`ext:${ext}`)) return existingMap.get(`ext:${ext}`);
+  const key = (raw.name || '').toLowerCase() + '|' + (brandName || 'Generic').toLowerCase();
+  return existingMap.get(key);
+}
+
 async function bulkImportProducts(db, rawItems = []) {
   const items = Array.isArray(rawItems) ? rawItems.slice(0, BULK_IMPORT_LIMIT) : [];
   const results = { created: 0, updated: 0, failed: 0, enriched: 0, errors: [] };
-  const startTime = Date.now();
   if (items.length === 0) return results;
 
   const enrichmentCatalog = await loadEnrichmentCatalogBatch(db, items);
@@ -138,25 +202,7 @@ async function bulkImportProducts(db, rawItems = []) {
   const findCat = (val) => findCatRaw(normalizeCategoryValue(val) || val);
   const findBrandCat = (val) => findCatRaw(val);
 
-  const namesAndBrands = items.map(raw => ({
-    name: raw.name?.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-    brand: (raw.brand || 'Generic').toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  })).filter(nb => nb.name);
-
-  let existingProducts = [];
-  if (namesAndBrands.length > 0) {
-    const orClause = namesAndBrands.map(nb => ({
-      name: { $regex: `^${nb.name}$`, $options: 'i' },
-      brand: { $regex: `^${nb.brand}$`, $options: 'i' }
-    }));
-    existingProducts = await db.collection('products').find({ $or: orClause }).toArray();
-  }
-
-  const existingMap = new Map();
-  for (const p of existingProducts) {
-    const key = (p.name || '').toLowerCase() + '|' + (p.brand || '').toLowerCase();
-    existingMap.set(key, p);
-  }
+  const existingMap = await loadExistingProductsForImport(db, items);
 
   const toInsert = [];
   const toUpdate = [];
@@ -176,8 +222,7 @@ async function bulkImportProducts(db, rawItems = []) {
       const brandCat = findBrandCat(raw.brand);
       const brandName = brandCat?.name || raw.brand || 'Generic';
 
-      const key = (raw.name || '').toLowerCase() + '|' + brandName.toLowerCase();
-      const existing = existingMap.get(key);
+      const existing = resolveExistingProduct(existingMap, raw, brandName);
 
       const enrich = lookupEnrichment(enrichmentCatalog, { ...raw, brand: brandName });
       const { merged, fields: enrichFields } = mergeEnrichmentFields(raw, existing || {}, enrich);
@@ -198,6 +243,9 @@ async function bulkImportProducts(db, rawItems = []) {
       }
     } catch (e) { results.failed++; results.errors.push(e.message); }
   }
+
+  const updateOps = [];
+  const inventoryLogs = [];
 
   for (const { raw, existing, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory, enrichFields = {} } of toUpdate) {
     try {
@@ -232,12 +280,15 @@ async function bulkImportProducts(db, rawItems = []) {
       if (subCat?.id) updateDoc.subcategoryId = subCat.id;
       if (subcategorySlug) updateDoc.subcategory = subcategorySlug;
 
-      await db.collection('products').updateOne(
-        { _id: existing._id },
-        { $set: updateDoc }
-      );
+      updateOps.push({
+        updateOne: {
+          filter: { _id: existing._id },
+          update: { $set: updateDoc },
+        },
+      });
+
       if (stockDiff !== 0) {
-        await db.collection('inventory_logs').insertOne({
+        inventoryLogs.push({
           id: 'inv-' + uuidv4().slice(0, 8),
           productId: existing.id,
           productName: existing.name,
@@ -246,15 +297,30 @@ async function bulkImportProducts(db, rawItems = []) {
           before: oldStock,
           after: newStock,
           reason: 'Bulk CSV import (stock update)',
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
         });
       }
       results.updated++;
     } catch (e) { results.failed++; results.errors.push(e.message); }
-    if (Date.now() - startTime > 18000) break;
   }
 
-  if (toInsert.length > 0 && (Date.now() - startTime) <= 18000) {
+  if (updateOps.length) {
+    try {
+      await db.collection('products').bulkWrite(updateOps, { ordered: false });
+    } catch (e) {
+      results.errors.push('Bulk update failed: ' + (e?.message || 'unknown'));
+    }
+  }
+
+  if (inventoryLogs.length) {
+    try {
+      await db.collection('inventory_logs').insertMany(inventoryLogs, { ordered: false });
+    } catch (e) {
+      results.errors.push('Inventory log insert failed: ' + (e?.message || 'unknown'));
+    }
+  }
+
+  if (toInsert.length > 0) {
     const newProducts = toInsert.map(({ raw, images, newStock, price, mrp, brandName, mainCat, subCat, brandCat, normalizedCategory, enrichFields = {} }) => {
       const id = 'p-' + uuidv4().slice(0, 8);
       const categorySlug = mainCat?.slug || normalizedCategory || (raw.category ? String(raw.category).trim().toLowerCase() : '');
@@ -325,31 +391,36 @@ async function processJobChunks(db, job, { maxChunks = 50, maxMs = 22000 } = {})
   let processedChunks = 0;
 
   while (processedChunks < maxChunks && Date.now() < deadline) {
-    const chunkRes = await db.collection('import_job_chunks').findOneAndDelete(
+    const chunk = await db.collection('import_job_chunks').findOne(
       { jobId: job.id },
       { sort: { index: 1 } }
     );
-    const chunk = unwrapMongoDoc(chunkRes);
     if (!chunk) break;
 
     const chunkRows = Array.isArray(chunk.rows) ? chunk.rows : [];
-    const chunkResults = await bulkImportProducts(db, chunkRows);
+    try {
+      const chunkResults = await bulkImportProducts(db, chunkRows);
+      await db.collection('import_job_chunks').deleteOne({ _id: chunk._id });
 
-    const update = {
-      $inc: {
-        processed: chunkRows.length,
-        created: chunkResults.created || 0,
-        updated: chunkResults.updated || 0,
-        failed: chunkResults.failed || 0,
-        pendingChunks: -1,
-      },
-      $set: { status: 'processing', updatedAt: new Date().toISOString() },
-    };
-    if (chunkResults.errors?.length) {
-      update.$push = { errors: { $each: chunkResults.errors.slice(0, 20) } };
+      const update = {
+        $inc: {
+          processed: chunkRows.length,
+          created: chunkResults.created || 0,
+          updated: chunkResults.updated || 0,
+          failed: chunkResults.failed || 0,
+          pendingChunks: -1,
+        },
+        $set: { status: 'processing', updatedAt: new Date().toISOString() },
+      };
+      if (chunkResults.errors?.length) {
+        update.$push = { errors: { $each: chunkResults.errors.slice(0, 20) } };
+      }
+      await db.collection('import_jobs').updateOne({ id: job.id }, update);
+      processedChunks++;
+    } catch (err) {
+      console.error('[IMPORT] Chunk failed, will retry', { jobId: job.id, index: chunk.index, err: err?.message });
+      throw err;
     }
-    await db.collection('import_jobs').updateOne({ id: job.id }, update);
-    processedChunks++;
   }
 
   const remaining = await db.collection('import_job_chunks').countDocuments({ jobId: job.id });
@@ -944,13 +1015,32 @@ export async function GET(req, { params }) {
       if (!job) return json({ ok: false, error: 'Job not found' }, 404, 'none');
       if (job.status === 'queued' || job.status === 'processing') {
         try {
-          await processJobChunks(db, job, { maxChunks: 8, maxMs: 12000 });
+          await processJobChunks(db, job, { maxChunks: 12, maxMs: 50000 });
         } catch (err) {
           console.error('[IMPORT] Status poll processing error', err);
         }
         job = await db.collection('import_jobs').findOne({ id }, { projection: { _id: 0 } });
       }
       return json({ job: await enrichImportJob(db, job) }, 200, 'none');
+    }
+
+    if (path === 'admin/import/process') {
+      const admin = await requireAdmin(req, db);
+      if (admin.error) return admin.error;
+      const jobId = searchParams.get('jobId') || searchParams.get('id');
+      if (!jobId) return json({ ok: false, error: 'jobId required' }, 400, 'none');
+      let job = await db.collection('import_jobs').findOne({ id: jobId }, { projection: { _id: 0 } });
+      if (!job) return json({ ok: false, error: 'Job not found' }, 404, 'none');
+      if (job.status !== 'queued' && job.status !== 'processing') {
+        return json({ ok: true, job: await enrichImportJob(db, job) }, 200, 'none');
+      }
+      try {
+        await processJobChunks(db, job, { maxChunks: 15, maxMs: 50000 });
+      } catch (err) {
+        console.error('[IMPORT] Process kick error', err);
+      }
+      job = await db.collection('import_jobs').findOne({ id: jobId }, { projection: { _id: 0 } });
+      return json({ ok: true, job: await enrichImportJob(db, job) }, 200, 'none');
     }
 
     if (path === 'admin/import/active') {
@@ -1755,8 +1845,8 @@ export async function POST(req, { params }) {
       const now = new Date().toISOString();
       const jobId = 'imp-' + uuidv4().slice(0, 8);
       const uploadChunkSize = Math.min(
-        Math.max(Number(body.chunkSize) || BULK_IMPORT_LIMIT, 25),
-        BULK_IMPORT_LIMIT
+        Math.max(Number(body.chunkSize) || 75, 25),
+        100
       );
       const expectedChunks = Math.ceil(total / uploadChunkSize);
 
