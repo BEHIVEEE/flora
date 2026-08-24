@@ -11,9 +11,10 @@ import { pickUploadChunkSize, slimImportRows } from '@/lib/import-upload';
 
 const JOB_KEY = 'flora-import-job';
 const META_KEY = 'flora-import-job-meta';
-const DEFAULT_UPLOAD_CHUNK_SIZE = 75;
+const DEFAULT_UPLOAD_CHUNK_SIZE = 80;
 const PROCESS_BATCH_SIZE = 50;
-const FETCH_TIMEOUT_MS = 120000;
+const FETCH_TIMEOUT_MS = 25000;
+const CHUNK_TIMEOUT_MS = 20000;
 
 function getUploadChunkSize(jobLike) {
   return jobLike?.uploadChunkSize || jobLike?.chunkSize || DEFAULT_UPLOAD_CHUNK_SIZE;
@@ -71,7 +72,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS)
   }
 }
 
-export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
+export function useImportJob({ onComplete, pollInterval = 3000 } = {}) {
   const [job, setJob] = useState(null);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState(null);
@@ -144,7 +145,7 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
       if (j.status === 'queued' || j.status === 'processing') {
         const stalledMs = Date.now() - lastProgressRef.current.at;
         if (stalledMs > 90000 && (j.processed || 0) === lastProgressRef.current.processed) {
-          toast.info('Import still running — keep this tab open. Processing large files can take 30–60+ minutes.');
+          toast.info('Import still running — keep this tab open.');
           lastProgressRef.current.at = Date.now();
         }
       }
@@ -155,9 +156,6 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
       return j;
     } catch (err) {
       console.error('[IMPORT] Poll failed', err);
-      if (err?.name === 'AbortError') {
-        toast.error('Import request timed out — will retry automatically');
-      }
       return null;
     }
   }, [applyJob, finishJob, stopPolling]);
@@ -167,7 +165,7 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
     setImporting(true);
     setResult(null);
     setUploadInterrupted(false);
-    lastProgressRef.current = { processed: 0, at: Date.now() };
+    lastProgressRef.current = { processed: lastProgressRef.current.processed || 0, at: Date.now() };
     stopPolling();
     pollStatus(id);
     pollRef.current = setInterval(() => pollStatus(id), pollInterval);
@@ -190,14 +188,13 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
 
   const postChunkWithRetry = useCallback(async (jobId, index, rows) => {
     let attempt = 0;
-    while (attempt < 5) {
+    while (attempt < 4) {
       try {
-        await postJson('/api/admin/import/chunk', { jobId, index, rows }, 120000);
-        return;
+        return await postJson('/api/admin/import/chunk', { jobId, index, rows }, CHUNK_TIMEOUT_MS);
       } catch (err) {
         attempt += 1;
-        if (attempt >= 5) throw err;
-        await sleep(1000 * attempt);
+        if (attempt >= 4) throw err;
+        await sleep(400 * attempt);
       }
     }
   }, [postJson]);
@@ -219,7 +216,7 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
       for (let i = fromIndex; i < totalBatches; i++) {
         const slice = slimRows.slice(i * chunkSize, (i + 1) * chunkSize);
         if (!slice.length) continue;
-        await postChunkWithRetry(jobId, i, slice);
+        const ack = await postChunkWithRetry(jobId, i, slice);
         applyJob({
           id: jobId,
           total: slimRows.length,
@@ -227,12 +224,12 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
           status: 'uploading',
           expectedChunks: totalBatches,
           uploadChunkSize: chunkSize,
-          uploadedChunks: i + 1,
+          uploadedChunks: ack?.uploadedChunks || i + 1,
           remainingUploadChunks: totalBatches - i - 1,
           pendingProcessingChunks: 0,
         });
       }
-      await postJson('/api/admin/import/finalize', { jobId }, 120000);
+      await postJson('/api/admin/import/finalize', { jobId }, 90000);
       await clearCachedImportRows();
     } catch (err) {
       setUploadInterrupted(true);
@@ -263,7 +260,7 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
 
     if (uploaded >= expected) {
       try {
-        await postJson('/api/admin/import/finalize', { jobId: activeJob.id }, 120000);
+        await postJson('/api/admin/import/finalize', { jobId: activeJob.id }, 90000);
         startPolling(activeJob.id);
       } catch (err) {
         console.error('[IMPORT] Finalize on resume failed', err);
@@ -279,7 +276,7 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
     try {
       await uploadChunks(activeJob.id, rows, uploaded, chunkSize, expected);
       startPolling(activeJob.id);
-      toast.success('Upload complete — import processing in background.');
+      toast.success('Upload complete.');
       return true;
     } catch (err) {
       console.error('[IMPORT] Resume upload failed', err);
@@ -360,16 +357,13 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
     setResult(null);
     setUploadInterrupted(false);
 
-    const chunkSize = pickUploadChunkSize(slim, DEFAULT_UPLOAD_CHUNK_SIZE);
+    const chunkSize = Math.min(Math.max(pickUploadChunkSize(slim, DEFAULT_UPLOAD_CHUNK_SIZE), 50), 100);
     let jobId = existingJobId;
-    let fromIndex = 0;
-    let expectedChunks = Math.ceil(slim.length / chunkSize);
 
     if (existingJobId && job?.status === 'uploading') {
-      fromIndex = job.uploadedChunks || 0;
       const resumeSize = getUploadChunkSize(job);
-      expectedChunks = job.expectedChunks || Math.ceil(slim.length / resumeSize);
-      await uploadChunks(jobId, slim, fromIndex, resumeSize, expectedChunks);
+      const expectedChunks = job.expectedChunks || Math.ceil(slim.length / resumeSize);
+      await uploadChunks(jobId, slim, job.uploadedChunks || 0, resumeSize, expectedChunks);
       startPolling(jobId);
       return jobId;
     }
@@ -380,8 +374,7 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
     });
     jobId = initData.jobId;
     const serverChunkSize = initData.uploadChunkSize || chunkSize;
-    expectedChunks = initData.expectedChunks;
-    fromIndex = 0;
+    const expectedChunks = initData.expectedChunks;
 
     applyJob({
       id: jobId,
@@ -390,14 +383,14 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
       status: 'uploading',
       expectedChunks,
       uploadChunkSize: serverChunkSize,
-      uploadedChunks: fromIndex,
-      remainingUploadChunks: expectedChunks - fromIndex,
+      uploadedChunks: 0,
+      remainingUploadChunks: expectedChunks,
       pendingProcessingChunks: 0,
     });
 
-    await uploadChunks(jobId, slim, fromIndex, serverChunkSize, expectedChunks);
+    await uploadChunks(jobId, slim, 0, serverChunkSize, expectedChunks);
     startPolling(jobId);
-    toast.success(`Import started (${slim.length} products). Keep this tab open until upload finishes.`);
+    toast.success(`Import started (${slim.length} products). Keep this tab open until it finishes.`);
     return jobId;
   }, [applyJob, job, postJson, startPolling, uploadChunks]);
 
@@ -418,7 +411,7 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
     toast.info(`Resuming upload from batch ${fromIndex + 1} of ${expectedChunks}…`);
     await uploadChunks(job.id, slim, fromIndex, chunkSize, expectedChunks);
     startPolling(job.id);
-    toast.success('Upload resumed — processing will continue in background.');
+    toast.success('Upload resumed.');
   }, [job, startPolling, uploadChunks]);
 
   const cancelImport = useCallback(async () => {
@@ -448,12 +441,12 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
         pendingProcessingChunks: job.pendingProcessingChunks ?? null,
         totalBatches: Math.max(
           1,
-          job.status === 'uploading' || isUploadingActive
+          job.status === 'uploading' || isUploadingActive || uploadInterrupted
             ? (job.expectedChunks || Math.ceil((job.total || 0) / getUploadChunkSize(job)))
             : Math.ceil((job.total || 0) / PROCESS_BATCH_SIZE)
         ),
         currentBatch:
-          job.status === 'uploading' || isUploadingActive
+          job.status === 'uploading' || isUploadingActive || uploadInterrupted
             ? (job.uploadedChunks || 0)
             : job.status === 'completed'
               ? Math.max(1, Math.ceil((job.total || 0) / PROCESS_BATCH_SIZE))
@@ -471,7 +464,7 @@ export function useImportJob({ onComplete, pollInterval = 2500 } = {}) {
   const resumeFromCache = useCallback(async () => {
     const rows = await readCachedImportRows();
     if (!rows?.length) {
-      toast.error('No cached file in browser — click below and re-select the same CSV/XLS');
+      toast.error('No cached file in browser — re-select the same CSV/XLS below');
       return false;
     }
     try {

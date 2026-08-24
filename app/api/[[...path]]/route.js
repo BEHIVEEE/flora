@@ -119,18 +119,18 @@ async function loadExistingProductsForImport(db, items) {
     return !existingMap.has(key);
   });
 
-  for (let i = 0; i < needNameLookup.length; i += 25) {
-    const batch = needNameLookup.slice(i, i + 25);
-    const orClause = batch.map((raw) => {
-      const name = raw.name?.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const brand = (raw.brand || 'Generic').toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return {
-        name: { $regex: `^${name}$`, $options: 'i' },
-        brand: { $regex: `^${brand}$`, $options: 'i' },
-      };
-    });
-    if (!orClause.length) continue;
-    const found = await db.collection('products').find({ $or: orClause }).toArray();
+  if (needNameLookup.length) {
+    const names = [...new Set(needNameLookup.map((r) => r.name).filter(Boolean))];
+    const found = await db.collection('products').find(
+      { name: { $in: names } },
+      {
+        projection: {
+          _id: 1, id: 1, name: 1, brand: 1, externalId: 1, stock: 1,
+          image: 1, images: 1, packSize: 1, description: 1, category: 1,
+          prescription: 1, composition: 1, categoryId: 1, subcategory: 1, subcategoryId: 1,
+        },
+      }
+    ).toArray();
     for (const p of found) {
       const key = (p.name || '').toLowerCase() + '|' + (p.brand || '').toLowerCase();
       existingMap.set(key, p);
@@ -1845,7 +1845,7 @@ export async function POST(req, { params }) {
       const now = new Date().toISOString();
       const jobId = 'imp-' + uuidv4().slice(0, 8);
       const uploadChunkSize = Math.min(
-        Math.max(Number(body.chunkSize) || 75, 25),
+        Math.max(Number(body.chunkSize) || 80, 25),
         100
       );
       const expectedChunks = Math.ceil(total / uploadChunkSize);
@@ -1907,8 +1907,8 @@ export async function POST(req, { params }) {
         return json({ ok: false, error: `Max ${BULK_IMPORT_LIMIT} rows per chunk` }, 400);
       }
       const chunkBytes = Buffer.byteLength(JSON.stringify(chunkRows), 'utf8');
-      if (chunkBytes > 4 * 1024 * 1024) {
-        return json({ ok: false, error: 'Chunk too large (>4MB). Try a file with shorter descriptions.' }, 413);
+      if (chunkBytes > 1.5 * 1024 * 1024) {
+        return json({ ok: false, error: 'Chunk too large. Use a smaller batch or shorter descriptions.' }, 413);
       }
 
       const job = await db.collection('import_jobs').findOne({ id: jobId });
@@ -1916,6 +1916,7 @@ export async function POST(req, { params }) {
       if (job.status !== 'uploading') return json({ ok: false, error: 'Job is not accepting uploads' }, 400);
 
       const now = new Date().toISOString();
+      // Store only — importing products on each upload timed out around batch 39.
       await db.collection('import_job_chunks').updateOne(
         { jobId, index },
         { $set: { jobId, index, rows: chunkRows, createdAt: now } },
@@ -1924,9 +1925,18 @@ export async function POST(req, { params }) {
       const uploadedChunks = await db.collection('import_job_chunks').countDocuments({ jobId });
       await db.collection('import_jobs').updateOne(
         { id: jobId },
-        { $set: { uploadedChunks, updatedAt: now } }
+        {
+          $set: { uploadedChunks, updatedAt: now },
+          $addToSet: { receivedIndexes: index },
+        }
       );
-      return json({ ok: true, jobId, index, uploadedChunks, expectedChunks: job.expectedChunks || 0 });
+      return json({
+        ok: true,
+        jobId,
+        index,
+        uploadedChunks,
+        expectedChunks: job.expectedChunks || 0,
+      });
     }
 
     if (path === 'admin/import/finalize') {
@@ -1939,15 +1949,35 @@ export async function POST(req, { params }) {
       if (!job) return json({ ok: false, error: 'Job not found' }, 404);
       if (job.status !== 'uploading') return json({ ok: false, error: 'Job already finalized' }, 400);
 
-      const uploadedChunks = await db.collection('import_job_chunks').countDocuments({ jobId });
+      const uploadedChunks = Math.max(
+        job.uploadedChunks || 0,
+        Array.isArray(job.receivedIndexes) ? job.receivedIndexes.length : 0,
+        await db.collection('import_job_chunks').countDocuments({ jobId })
+      );
       const expected = job.expectedChunks || 0;
       if (uploadedChunks < expected) {
         return json({ ok: false, error: `Incomplete upload: ${uploadedChunks}/${expected} batches received` }, 400);
       }
 
+      const leftover = await db.collection('import_job_chunks').countDocuments({ jobId });
+      if (leftover === 0) {
+        await db.collection('import_jobs').updateOne(
+          { id: jobId },
+          {
+            $set: {
+              status: 'completed',
+              pendingChunks: 0,
+              updatedAt: new Date().toISOString(),
+              completedAt: new Date().toISOString(),
+            },
+          }
+        );
+        return json({ ok: true, jobId, total: job.total, status: 'completed' });
+      }
+
       await db.collection('import_jobs').updateOne(
         { id: jobId },
-        { $set: { status: 'queued', pendingChunks: uploadedChunks, updatedAt: new Date().toISOString() } }
+        { $set: { status: 'queued', pendingChunks: leftover, updatedAt: new Date().toISOString() } }
       );
       try {
         await kickImportProcessor(db, { maxChunks: 5, maxMs: 15000 });
